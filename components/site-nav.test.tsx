@@ -7,12 +7,12 @@ const links = () => within(screen.getByRole("navigation", { name: "Main" })).get
 const current = () => links().filter((a) => a.getAttribute("aria-current") === "page").map((a) => a.textContent);
 
 describe("main nav", () => {
-  it("links Watchlist, Browse, Explore and Status, in that order", () => {
+  it("links Explore first, then Watchlist, Browse and Status", () => {
     render(<SiteNavLinks path="/" />);
     expect(links().map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
+      ["Explore", "/explore"],
       ["Watchlist", "/"],
       ["Browse", "/browse"],
-      ["Explore", "/explore"],
       ["Status", "/status"],
     ]);
   });

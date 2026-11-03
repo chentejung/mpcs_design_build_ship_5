@@ -2,10 +2,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+// Explore first: it's open to everyone and the best first look at the app.
 const LINKS = [
+  { href: "/explore", label: "Explore" },
   { href: "/", label: "Watchlist" },
   { href: "/browse", label: "Browse" },
-  { href: "/explore", label: "Explore" },
   { href: "/status", label: "Status" },
 ] as const;
 
