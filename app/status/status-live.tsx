@@ -1,5 +1,6 @@
 "use client";
 import { FreshnessView } from "@/components/freshness";
+import { LocalTime } from "@/components/local-time";
 import { useLiveRuns } from "@/components/use-live-runs";
 import { useNow } from "@/components/use-now";
 import { ago } from "@/lib/format";
@@ -32,10 +33,7 @@ export function StatusLive({ initial, renderedAt }: { initial: Run[]; renderedAt
             {runs.map((r) => (
               <tr key={r.id} className="align-top">
                 <td className="num whitespace-nowrap px-4 py-2 text-dim">
-                  {/* Local time: the server (UTC on Vercel) and the browser may differ for a moment. */}
-                  <time dateTime={r.started_at} suppressHydrationWarning>
-                    {new Date(r.started_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}
-                  </time>
+                  <LocalTime iso={r.started_at} precision="seconds" />
                   <span className="ml-2 text-xs text-faint">{ago(new Date(r.finished_at), now)}</span>
                 </td>
                 <td className="px-4 py-2">

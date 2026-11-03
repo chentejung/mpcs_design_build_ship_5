@@ -1,10 +1,9 @@
 // The one Freshness display, used everywhere (AGENTS.md → Freshness):
 // loading → skeleton · Fresh → "Live · updated 4 s ago" · Stale → amber banner · Down → red banner.
 import Link from "next/link";
+import { LocalTime } from "@/components/local-time";
 import { ago } from "@/lib/format";
 import type { Freshness } from "@/lib/freshness";
-
-const time = (d: Date) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 export function FreshnessView({
   freshness,
@@ -56,7 +55,7 @@ export function FreshnessView({
       return (
         <div role="alert" className="rounded-lg border border-down/50 bg-down/10 px-4 py-3 text-sm">
           <p className="font-semibold text-down">
-            Feed failing since <time dateTime={freshness.since.toISOString()} suppressHydrationWarning>{time(freshness.since)}</time>
+            Feed failing since <LocalTime iso={freshness.since.toISOString()} />
           </p>
           <p className="num mt-0.5 break-words text-dim">{freshness.error}</p>
           <p className="mt-1 text-dim">
