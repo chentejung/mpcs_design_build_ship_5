@@ -195,6 +195,7 @@ export type Database = {
     }
     Functions: {
       apply_prices: { Args: { prices: Json }; Returns: number }
+      check_cron_secret: { Args: { candidate: string }; Returns: boolean }
       release_run_lock: { Args: { lock_holder: string }; Returns: undefined }
       try_run_lock: { Args: never; Returns: string }
       upsert_catalog: { Args: { payload: Json }; Returns: number }
