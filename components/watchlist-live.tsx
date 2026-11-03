@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { clearFinished } from "@/app/actions/follows";
-import { FreshnessView, isMuted } from "@/components/freshness";
+import { FreshnessView, Heartbeat, isMuted } from "@/components/freshness";
 import { useNow } from "@/components/use-now";
 import { WatchCard } from "@/components/watch-card";
 import { useWatchlistFeed } from "@/components/watchlist-feed";
@@ -68,7 +68,10 @@ export function WatchlistLive({
           <h1 className="text-2xl font-semibold tracking-tight">Watchlist</h1>
           <p className="num mt-1 text-xs text-faint">{items.length} of {FOLLOW_LIMIT} followed</p>
         </div>
-        {f.state === "fresh" || f.state === "loading" ? <FreshnessView freshness={f} now={now} /> : null}
+        <div className="flex items-center gap-3">
+          <Heartbeat freshness={f} beat={runs[0]?.id} />
+          {f.state === "fresh" || f.state === "loading" ? <FreshnessView freshness={f} now={now} /> : null}
+        </div>
       </div>
       {f.state === "stale" || f.state === "down" ? (
         <div className="mt-4"><FreshnessView freshness={f} now={now} /></div>

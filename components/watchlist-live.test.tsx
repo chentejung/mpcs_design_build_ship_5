@@ -217,3 +217,82 @@ describe("cards v2", () => {
   });
 });
 
+describe("heartbeat", () => {
+  const atNow = () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(NOW));
+  };
+  const heartbeat = () => screen.getByRole("img", { name: /^Feed / });
+
+  it("says live and beats for the latest Run while the banner says Live", () => {
+    atNow();
+    show([market({ id: "1" })], [run({ id: 7 })]);
+    expect(screen.getByRole("status")).toHaveTextContent("Live · updated");
+    expect(heartbeat()).toHaveAccessibleName("Feed live");
+    expect(heartbeat()).toHaveAttribute("data-state", "fresh");
+    expect(heartbeat()).toHaveAttribute("data-beat", "7");
+  });
+
+  it("beats again for each new Run seen", () => {
+    atNow();
+    const feed = show([market({ id: "1" })], [run({ id: 7 })]);
+    feed.pushRun(run({ id: 8 }));
+    expect(heartbeat()).toHaveAttribute("data-beat", "8");
+  });
+
+  it("goes flat and Stale after 30 seconds, with the banner", () => {
+    atNow();
+    show([market({ id: "1" })]);
+    act(() => vi.advanceTimersByTime(31_000));
+    expect(screen.getByRole("status")).toHaveTextContent("Chances may be out of date");
+    expect(heartbeat()).toHaveAccessibleName("Feed stale");
+    expect(heartbeat()).toHaveAttribute("data-state", "stale");
+    expect(heartbeat()).not.toHaveAttribute("data-beat");
+  });
+
+  it("goes flat and Stale while the live channel is lost, with the banner", () => {
+    atNow();
+    const feed = show([market({ id: "1" })]);
+    feed.setConnection("lost");
+    expect(screen.getByRole("status")).toHaveTextContent("Reconnecting…");
+    expect(heartbeat()).toHaveAccessibleName("Feed stale");
+    expect(heartbeat()).toHaveAttribute("data-state", "stale");
+  });
+
+  it("is Down with the banner, and links to the run log", () => {
+    atNow();
+    show([market({ id: "1" })], [run({ ok: false, error: "CLOB timed out" })]);
+    expect(screen.getByRole("alert")).toHaveTextContent("Feed failing since");
+    expect(heartbeat()).toHaveAccessibleName("Feed down");
+    expect(heartbeat()).toHaveAttribute("data-state", "down");
+    expect(heartbeat()).not.toHaveAttribute("data-beat");
+    expect(screen.getByRole("link", { name: "Feed down" })).toHaveAttribute("href", "/status");
+  });
+
+  it("is neutral while no Run has been seen", () => {
+    show([market({ id: "1" })], []);
+    expect(heartbeat()).toHaveAccessibleName("Feed loading");
+    expect(heartbeat()).toHaveAttribute("data-state", "loading");
+  });
+
+  it("is a static indicator that still states Freshness when the viewer prefers reduced motion", () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    try {
+      atNow();
+      const feed = show([market({ id: "1" })], [run({ id: 7 })]);
+      feed.pushRun(run({ id: 8 }));
+      expect(heartbeat()).toHaveAccessibleName("Feed live");
+      expect(heartbeat()).toHaveAttribute("data-state", "fresh");
+      expect(heartbeat()).not.toHaveAttribute("data-beat");
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+});
+

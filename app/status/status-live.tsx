@@ -1,5 +1,5 @@
 "use client";
-import { FreshnessView } from "@/components/freshness";
+import { FreshnessView, Heartbeat } from "@/components/freshness";
 import { LocalTime } from "@/components/local-time";
 import { useLiveRuns } from "@/components/use-live-runs";
 import { useNow } from "@/components/use-now";
@@ -14,8 +14,11 @@ export function StatusLive({ initial, renderedAt }: { initial: Run[]; renderedAt
 
   return (
     <>
-      <div className="mt-4">
-        <FreshnessView freshness={f} now={now} live={false} chances={false} />
+      <div className="mt-4 flex items-start gap-3">
+        <span className="flex h-6 items-center"><Heartbeat freshness={f} beat={runs[0]?.id} /></span>
+        <div className="min-w-0 flex-1">
+          <FreshnessView freshness={f} now={now} live={false} chances={false} />
+        </div>
       </div>
       <div className="mt-6 overflow-x-auto rounded-lg border border-line bg-panel">
         <table className="w-full text-left text-sm">

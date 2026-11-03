@@ -3,7 +3,7 @@
 // and Refresh reloads the page's data. The Stale/Down banner is the system's state when the page loaded.
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
-import { FreshnessView } from "@/components/freshness";
+import { FreshnessView, Heartbeat } from "@/components/freshness";
 import { ago } from "@/lib/format";
 import { freshness, type RunSummary } from "@/lib/freshness";
 import { useNow } from "./use-now";
@@ -19,6 +19,7 @@ export function BrowseFreshness({ runs, loadedAt }: { runs: RunSummary[]; loaded
     <div className="space-y-3">
       {atLoad.state === "stale" || atLoad.state === "down" ? <FreshnessView freshness={atLoad} now={now} /> : null}
       <p className="flex flex-wrap items-center gap-x-2 text-sm text-dim">
+        <Heartbeat freshness={atLoad} beat={runs[0]?.finished_at} />
         <span>
           Prices as of <span className="num">{ago(pricesAsOf, now)}</span>
         </span>
