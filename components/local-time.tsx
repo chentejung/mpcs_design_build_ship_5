@@ -6,6 +6,7 @@ import { useSyncExternalStore } from "react";
 const FORMATS = {
   minutes: { hour: "numeric", minute: "2-digit" },
   seconds: { hour: "numeric", minute: "2-digit", second: "2-digit" },
+  date: { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" },
 } as const satisfies Record<string, Intl.DateTimeFormatOptions>;
 
 const noSubscription = () => () => {};

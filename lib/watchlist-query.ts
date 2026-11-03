@@ -24,3 +24,16 @@ export function selectFollows(db: SupabaseClient<Database>, now: Date) {
     .limit(1, { referencedTable: "markets.before" })
     .order("created_at");
 }
+
+/**
+ * For the Recap: each followed Market's last price_history row at or before `at` (lib/recap.ts → recapStart).
+ * Read once per page load on the server; RLS again limits it to this user's Follows.
+ */
+export function selectPricesAt(db: SupabaseClient<Database>, at: string) {
+  return db
+    .from("follows")
+    .select(`market_id, markets!inner(at_visit:price_history(${HISTORY}))`)
+    .lte("markets.at_visit.recorded_at", at)
+    .order("recorded_at", { referencedTable: "markets.at_visit", ascending: false })
+    .limit(1, { referencedTable: "markets.at_visit" });
+}

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { clearFinished } from "@/app/actions/follows";
 import { FreshnessView, Heartbeat, isMuted } from "@/components/freshness";
+import { RecapPanel } from "@/components/recap";
 import { useNow } from "@/components/use-now";
 import { WatchCard } from "@/components/watch-card";
 import { useWatchlistFeed } from "@/components/watchlist-feed";
@@ -76,6 +77,7 @@ export function WatchlistLive({
       {f.state === "stale" || f.state === "down" ? (
         <div className="mt-4"><FreshnessView freshness={f} now={now} /></div>
       ) : null}
+      <RecapPanel now={now} />
 
       {items.length === 0 ? (
         <div className="mt-8 rounded-lg border border-dashed border-line px-6 py-12 text-center">

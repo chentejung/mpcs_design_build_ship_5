@@ -1,8 +1,11 @@
 // The live Watchlist as a user sees it, with Supabase + Realtime replaced by a fake feed at its seam.
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { recordVisit } from "@/app/actions/visits";
+import { RecapScope } from "@/components/recap";
 import { WatchlistFeedProvider } from "@/components/watchlist-feed";
 import { WatchlistLive } from "@/components/watchlist-live";
+import type { Recap } from "@/lib/recap";
 import type { Run } from "@/lib/runs";
 import type { Followed } from "@/lib/watchlist";
 import { fakeFeed, type FakeFeed } from "@/test/fake-feed";
@@ -397,6 +400,121 @@ describe("sparkline and Δ", () => {
       expect(sparkline()).toHaveAttribute("data-motion", "off");
     } finally {
       window.matchMedia = original;
+    }
+  });
+});
+
+describe("recap", () => {
+  const LAST = "2026-11-03T08:00:00.000Z";
+  const moved = (over: Partial<Extract<Recap, { kind: "moved" }>> = {}): Recap => ({
+    kind: "moved",
+    since: LAST,
+    capped: false,
+    entries: [
+      { id: "1", label: "Question 1?", outcomes: ["Yes", "No"], from: 0.5, to: 0.62, points: 12, dir: "up" },
+      { id: "2", label: "Question 2?", outcomes: ["Hawks", "Pacers"], from: 0.45, to: 0.3, points: -15, dir: "down" },
+    ],
+    finished: [],
+    ...over,
+  });
+  const items = () => [
+    market({ id: "1", price: 0.62 }),
+    market({ id: "2", price: 0.3, outcomes: ["Hawks", "Pacers"] }),
+  ];
+  function showRecap(r: Recap, list: Followed[] = items()) {
+    const feed = fakeFeed();
+    render(
+      <RecapScope recap={r}>
+        <WatchlistFeedProvider value={feed.useFeed}>
+          <WatchlistLive initialItems={list} initialRuns={[run()]} renderedAt={NOW} />
+        </WatchlistFeedProvider>
+      </RecapScope>,
+    );
+  }
+  const NAME = /since your last visit|nothing big moved/i;
+  const panel = () => screen.getByRole("region", { name: NAME });
+  const reducedMotion = () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    return () => {
+      window.matchMedia = original;
+    };
+  };
+
+  it("lists the Markets that moved, from → to, with direction coloured only on Yes/No", () => {
+    showRecap(moved());
+    const region = panel();
+    expect(within(region).getByRole("heading", { name: /^Since your last visit/ })).toBeInTheDocument();
+    const yes = within(region).getByText("Question 1?").closest("li")!;
+    expect(yes).toHaveTextContent("Yes 50 → 62");
+    expect(within(yes).getByRole("img", { name: "Up 12 points" })).toHaveAttribute("data-tone", "up");
+    const teams = within(region).getByText("Question 2?").closest("li")!;
+    expect(teams).toHaveTextContent("Hawks 45 → 30");
+    expect(within(teams).getByRole("img", { name: "Down 15 points" })).toHaveAttribute("data-tone", "neutral");
+    expect(within(region).getByRole("button", { name: "Replay the moves" })).toBeInTheDocument();
+  });
+
+  it("includes Markets that became Finished since the last visit", () => {
+    showRecap(moved({
+      entries: [],
+      finished: [{ id: "3", label: "Ended one?", outcomes: ["Yes", "No"], from: 0.8, to: 0.99, points: 19, dir: "up" }],
+    }));
+    const ended = within(panel()).getByText("Ended one?").closest("li")!;
+    expect(ended).toHaveTextContent("Finished");
+    expect(ended).toHaveTextContent("Yes 80 → 99");
+  });
+
+  it("says nothing big moved when it was quiet, without a Replay", () => {
+    showRecap({ kind: "quiet", since: LAST, capped: false });
+    expect(within(panel()).getByRole("heading", { name: /^Nothing big moved since/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Replay the moves" })).not.toBeInTheDocument();
+  });
+
+  it("says it covers only the last 7 days when the last visit is older", () => {
+    showRecap(moved({ capped: true }));
+    expect(panel()).toHaveTextContent("Covers only the last 7 days");
+  });
+
+  it("shows nothing on a first visit", () => {
+    showRecap({ kind: "none" });
+    expect(screen.queryByRole("region", { name: NAME })).not.toBeInTheDocument();
+  });
+
+  it("can be dismissed", () => {
+    showRecap(moved());
+    act(() => within(panel()).getByRole("button", { name: "Dismiss the recap" }).click());
+    expect(screen.queryByRole("region", { name: NAME })).not.toBeInTheDocument();
+  });
+
+  it("records this visit once, after the page has read the previous one", () => {
+    vi.mocked(recordVisit).mockClear();
+    showRecap(moved());
+    expect(recordVisit).toHaveBeenCalledTimes(1);
+  });
+
+  it("replays each bar from its old split to the current one", () => {
+    showRecap(moved());
+    const bar = () => panel().querySelector("[data-recap-bar='1']")!;
+    expect(bar()).toHaveAttribute("data-at", "to");
+    act(() => within(panel()).getByRole("button", { name: "Replay the moves" }).click());
+    expect(panel()).toHaveAttribute("data-replay");
+    expect(bar()).toHaveAttribute("data-at", "from");
+  });
+
+  it("replays instantly when the viewer prefers reduced motion", () => {
+    const restore = reducedMotion();
+    try {
+      showRecap(moved());
+      act(() => within(panel()).getByRole("button", { name: "Replay the moves" }).click());
+      expect(panel()).not.toHaveAttribute("data-replay");
+      expect(panel().querySelector("[data-recap-bar='1']")).toHaveAttribute("data-at", "to");
+    } finally {
+      restore();
     }
   });
 });

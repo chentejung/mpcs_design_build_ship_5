@@ -20,3 +20,7 @@ vi.mock("@/app/actions/follows", () => ({
   unfollow: vi.fn(async () => ({ ok: true })),
   clearFinished: vi.fn(async () => ({ ok: true })),
 }));
+
+vi.mock("@/app/actions/visits", () => ({
+  recordVisit: vi.fn(async () => {}),
+}));
