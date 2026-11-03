@@ -115,6 +115,10 @@ Computed by a pure function in `lib/freshness.ts` (unit-tested) and shown by one
 | Stale | no ok Run for ≥ 30 s, or the Realtime channel isn't subscribed | amber banner, Chances greyed |
 | Down | the latest non-skipped Run failed | red banner with since-when, the error, link to `/status` |
 
+A small **heartbeat** line (`Heartbeat` in `components/freshness.tsx`) sits in each page's header row: it beats once
+per new Run while Fresh, is flat amber when Stale, flat red linking to `/status` when Down, neutral while loading,
+and static under `prefers-reduced-motion`.
+
 Each card separately shows when it **Moved** (`price_changed_at`), so a quiet Market isn't mistaken for a Stale system.
 
 ## Data access

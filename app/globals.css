@@ -94,7 +94,14 @@ body {
 }
 .live-dot { animation: pulse-dot 2s ease-in-out infinite; }
 
+/* Heartbeat: the pulse line traces itself once per new Run (components/freshness.tsx). */
+@keyframes heartbeat-trace {
+  from { stroke-dashoffset: 100; }
+  to { stroke-dashoffset: 0; }
+}
+.heartbeat-beat { stroke-dasharray: 100; animation: heartbeat-trace 0.9s ease-out both; }
+
 @media (prefers-reduced-motion: reduce) {
-  .roll-up, .roll-down, .live-dot { animation: none; }
+  .roll-up, .roll-down, .live-dot, .heartbeat-beat { animation: none; }
   * { transition: none !important; }
 }
