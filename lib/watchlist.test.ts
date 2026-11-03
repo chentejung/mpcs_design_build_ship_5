@@ -63,3 +63,46 @@ describe("marketsFilter and toFollowed", () => {
     expect(toFollowed([{ created_at: "t", markets: market({ id: "5" }) }])[0]).toMatchObject({ id: "5", followed_at: "t" });
   });
 });
+
+describe("history on the Watchlist", () => {
+  const t = (iso: string) => new Date(iso).getTime();
+  const withHistory = followed("1", "t1", { price: 0.6, price_changed_at: "2026-11-03T11:00:00Z" });
+  const items = [{ ...withHistory, history: [{ at: t("2026-11-03T11:00:00Z"), price: 0.6 }] }];
+
+  it("appends a point when the Price changes, at the time it changed", () => {
+    const next = applyMarketUpdate(items, { id: "1", price: 0.62, price_changed_at: "2026-11-03T12:00:00Z" });
+    expect(next[0].history).toEqual([
+      { at: t("2026-11-03T11:00:00Z"), price: 0.6 },
+      { at: t("2026-11-03T12:00:00Z"), price: 0.62 },
+    ]);
+  });
+
+  it("appends nothing when the Price doesn't change", () => {
+    expect(applyMarketUpdate(items, { id: "1", price: "0.6000" as unknown as number })[0].history).toEqual(items[0].history);
+    expect(applyMarketUpdate(items, { id: "1", closed: true })[0].history).toEqual(items[0].history);
+  });
+
+  it("starts a history for a Market that had none", () => {
+    const bare = [followed("1", "t1", { price: 0.6 })];
+    const next = applyMarketUpdate(bare, { id: "1", price: 0.61, price_changed_at: "2026-11-03T12:00:00Z" });
+    expect(next[0].history).toEqual([{ at: t("2026-11-03T12:00:00Z"), price: 0.61 }]);
+  });
+
+  it("reads a follow's history from the joined price_history rows", () => {
+    const row = {
+      created_at: "t",
+      markets: {
+        ...market({ id: "5" }),
+        recent: [{ price: 0.62, recorded_at: "2026-11-03T11:30:00Z" }],
+        before: [{ price: 0.7, recorded_at: "2026-11-02T09:00:00Z" }],
+      },
+    };
+    const [m] = toFollowed([row]);
+    expect(m.history).toEqual([
+      { at: t("2026-11-02T09:00:00Z"), price: 0.7 },
+      { at: t("2026-11-03T11:30:00Z"), price: 0.62 },
+    ]);
+    expect(m).not.toHaveProperty("recent");
+    expect(m).not.toHaveProperty("before");
+  });
+});

@@ -79,6 +79,10 @@ select grant, and an RLS policy that lets the viewer read it. Published tables: 
 else. The Watchlist subscribes to `markets` UPDATEs filtered `id=in.(followed ids)` and to `worker_runs` INSERTs. On
 every (re)subscribe it **refetches its snapshot**, because Realtime doesn't replay missed changes.
 
+The Watchlist's snapshot (first render and every refetch, `lib/watchlist-query.ts`) also reads each followed
+Market's last 24 h of `price_history` (≤ 1000 rows, plus the last row before then) for its sparkline and **Δ** 1h /
+24h. Live points come from the `markets` UPDATEs above (`lib/history.ts`); `price_history` is **not** published.
+
 ## The worker
 
 `supabase/functions/sync-markets/` — `index.ts` (Deno entry) plus `logic.ts` (pure TypeScript, **no Deno APIs or

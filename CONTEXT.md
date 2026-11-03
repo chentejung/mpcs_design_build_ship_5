@@ -47,6 +47,12 @@ _Avoid_: odds, probability, likelihood
 How long ago a Market's Price last changed. A quiet Market can have moved long ago while the data is still Fresh.
 _Avoid_: updated (that word belongs to Freshness)
 
+**Δ** (delta):
+How far a Market's Price has moved over a window (Δ 1h, Δ 24h): the current Price minus the Price at the start of
+the window, shown in Chance points with a sign and one decimal ("+2.4", "−0.7"), or "—" when there isn't enough
+history that old.
+_Avoid_: change %, gain, return
+
 ## People
 
 **Follow**:

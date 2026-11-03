@@ -3,10 +3,10 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { WatchlistLive } from "@/components/watchlist-live";
-import { MARKET_COLUMNS } from "@/lib/markets";
 import { RUN_COLUMNS, RUN_LOG_SIZE } from "@/lib/runs";
 import { supabase } from "@/lib/supabase";
 import { toFollowed, type FollowRow } from "@/lib/watchlist";
+import { selectFollows } from "@/lib/watchlist-query";
 
 // Signed out: a short landing page. Signed in: the live Watchlist.
 export default function Home() {
@@ -24,8 +24,8 @@ async function HomeForViewer() {
   await connection();
   const db = supabase();
   const [follows, runs] = await Promise.all([
-    // RLS returns only this user's Follows.
-    db.from("follows").select(`created_at, markets!inner(${MARKET_COLUMNS})`).order("created_at"),
+    // RLS returns only this user's Follows, each with its last 24 h of price_history.
+    selectFollows(db, new Date()),
     db.from("worker_runs").select(RUN_COLUMNS).order("started_at", { ascending: false }).limit(RUN_LOG_SIZE),
   ]);
   if (follows.error) throw new Error(`Couldn't load your Watchlist: ${follows.error.message}`);

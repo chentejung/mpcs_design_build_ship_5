@@ -4,10 +4,11 @@
 // ids) and `worker_runs` INSERTs. UI tests provide a fake through WatchlistFeedProvider.
 import { createContext, useContext } from "react";
 import { useRealtimeChannel, type Connection } from "@/components/use-realtime";
-import { MARKET_COLUMNS, type Market } from "@/lib/markets";
+import type { Market } from "@/lib/markets";
 import { RUN_COLUMNS, RUN_LOG_SIZE, type Run } from "@/lib/runs";
 import { useSupabaseBrowser } from "@/lib/supabase-browser";
 import { marketsFilter, type FollowRow } from "@/lib/watchlist";
+import { selectFollows } from "@/lib/watchlist-query";
 
 export type WatchlistSnapshot = { follows: FollowRow[] | null; runs: Run[] | null };
 
@@ -22,7 +23,7 @@ export type WatchlistFeedArgs = {
 
 export type WatchlistFeed = {
   connection: Connection;
-  /** The user's Follows (RLS) and the latest Runs, or nulls if they couldn't be read. */
+  /** The user's Follows (RLS) with their last 24 h of price_history, and the latest Runs; nulls if unreadable. */
   loadSnapshot(): Promise<WatchlistSnapshot>;
 };
 
@@ -50,7 +51,7 @@ export const useSupabaseWatchlistFeed: UseWatchlistFeed = ({ marketIds, onMarket
   const loadSnapshot = async (): Promise<WatchlistSnapshot> => {
     if (!db) return { follows: null, runs: null };
     const [follows, runs] = await Promise.all([
-      db.from("follows").select(`created_at, markets!inner(${MARKET_COLUMNS})`).order("created_at"),
+      selectFollows(db, new Date()),
       db.from("worker_runs").select(RUN_COLUMNS).order("started_at", { ascending: false }).limit(RUN_LOG_SIZE),
     ]);
     return { follows: (follows.data as unknown as FollowRow[] | null) ?? null, runs: runs.data ?? null };
