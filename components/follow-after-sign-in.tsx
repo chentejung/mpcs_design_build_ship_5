@@ -1,13 +1,14 @@
 "use client";
-// Sign-in then follow (product rule 7): back on /browse?follow=<id> signed in, follow that Market once, then
-// drop ?follow from the URL so a reload doesn't repeat it. Following twice is harmless anyway.
-import { useRouter, useSearchParams } from "next/navigation";
+// Sign-in then follow (product rule 7): back on /browse?follow=<id> (or /explore?follow=<id>) signed in, follow that
+// Market once, then drop ?follow from the URL so a reload doesn't repeat it. Following twice is harmless anyway.
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { follow } from "@/app/actions/follows";
 
 export function FollowAfterSignIn({ signedIn }: { signedIn: boolean }) {
   const router = useRouter();
   const params = useSearchParams();
+  const path = usePathname();
   const pendingId = params.get("follow");
   const started = useRef<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -21,10 +22,10 @@ export function FollowAfterSignIn({ signedIn }: { signedIn: boolean }) {
     startTransition(async () => {
       const result = await follow(pendingId);
       setMessage(result.ok ? "Followed. It's on your Watchlist now." : result.message);
-      router.replace(`/browse${rest.size ? `?${rest}` : ""}`, { scroll: false });
+      router.replace(`${path}${rest.size ? `?${rest}` : ""}`, { scroll: false });
       router.refresh();
     });
-  }, [signedIn, pendingId, params, router]);
+  }, [signedIn, pendingId, params, path, router]);
 
   if (!message) return null;
   return (

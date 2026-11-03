@@ -1,8 +1,9 @@
 "use client";
-// Markets by place on the signed-out landing page (issue #15), without the globe: the plain list of places
-// (always shown, and the whole UI on small screens, without WebGL, or for screen readers and keyboards), the
+// Markets by place on the signed-out landing page and Explore (issue #15), without the globe: the plain list of
+// places (always shown, and the whole UI on small screens, without WebGL, or for screen readers and keyboards), the
 // selected place's Markets as Browse cards with Follow, and the Global shelf of Markets with no place.
-// Follow here is Browse's: signed out it opens sign-in and returns to /browse?category=…&follow=<id> (rule 7).
+// Follow here is Browse's: signed out it opens sign-in and returns to the viewer's `returnTo` (by default the
+// Market's Browse Category) with ?follow=<id>, where FollowAfterSignIn follows it once (rule 7).
 import { useState } from "react";
 import { BrowseCard } from "@/components/browse-card";
 import { volume } from "@/lib/format";
@@ -47,7 +48,18 @@ export function PlaceList({
   );
 }
 
-function MarketCards({ group, now, wide = false }: { group: PlaceGroup; now: Date; wide?: boolean }) {
+/** Who is looking, for each card's Follow. */
+export type Viewer = {
+  signedIn: boolean;
+  /** Ids of the Markets they follow (RLS: only theirs). */
+  followed: readonly string[];
+  /** The page to come back to after sign-in; by default each Market's Browse Category. */
+  returnTo?: string;
+};
+
+export const SIGNED_OUT: Viewer = { signedIn: false, followed: [] };
+
+function MarketCards({ group, now, viewer, wide = false }: { group: PlaceGroup; now: Date; viewer: Viewer; wide?: boolean }) {
   const [all, setAll] = useState(false);
   const shown = all ? group.markets : group.markets.slice(0, SHOWN);
   return (
@@ -60,9 +72,9 @@ function MarketCards({ group, now, wide = false }: { group: PlaceGroup; now: Dat
             market={{ ...m, group_item_title: null }}
             now={now}
             muted={false}
-            followed={false}
-            signedIn={false}
-            returnTo={`/browse?category=${m.category}`}
+            followed={viewer.followed.includes(m.id)}
+            signedIn={viewer.signedIn}
+            returnTo={viewer.returnTo ?? `/browse?category=${m.category}`}
           />
         ))}
       </ul>
@@ -79,7 +91,7 @@ function MarketCards({ group, now, wide = false }: { group: PlaceGroup; now: Dat
   );
 }
 
-export function PlacePanel({ place, now }: { place: PlaceGroup | null; now: Date }) {
+export function PlacePanel({ place, now, viewer = SIGNED_OUT }: { place: PlaceGroup | null; now: Date; viewer?: Viewer }) {
   if (!place) {
     return (
       <p className="rounded-xl border border-line bg-panel p-5 text-sm text-dim shadow-card">
@@ -98,12 +110,12 @@ export function PlacePanel({ place, now }: { place: PlaceGroup | null; now: Date
         </p>
       </div>
       {/* Re-mounts per place, so "Show all" starts collapsed for each. */}
-      <MarketCards key={place.code} group={place} now={now} />
+      <MarketCards key={place.code} group={place} now={now} viewer={viewer} />
     </section>
   );
 }
 
-export function GlobalShelf({ global, now }: { global: PlaceGroup; now: Date }) {
+export function GlobalShelf({ global, now, viewer = SIGNED_OUT }: { global: PlaceGroup; now: Date; viewer?: Viewer }) {
   return (
     <section aria-labelledby="global-heading">
       <div className="mb-3 flex items-baseline justify-between gap-3">
@@ -117,7 +129,7 @@ export function GlobalShelf({ global, now }: { global: PlaceGroup; now: Date }) 
           Every Market right now has a place on the globe.
         </p>
       ) : (
-        <MarketCards group={global} now={now} wide />
+        <MarketCards group={global} now={now} viewer={viewer} wide />
       )}
     </section>
   );

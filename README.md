@@ -6,9 +6,10 @@ data is fresh, stale or down. Nobody trades here.
 
 Where Polymarket is built for betting, Odds Desk is built for **watching**:
 
-- **A world view:** the landing page opens on a banner of the 5 busiest topics right now, then a 3D globe of
-  Markets by place (from gamma's own tags): pick a country or region to see its Markets; placeless ones sit on a
-  **Global** shelf.
+- **A world view:** the landing page (and, signed in, the **Explore** tab) opens on a banner of the 5 busiest topics
+  right now, then a 3D globe of Markets by place (from gamma's own tags) on NASA's Blue Marble, with pulsing rings,
+  labels and arcs between places that share a Market: pick a country or region to see its Markets; placeless ones
+  sit on a **Global** shelf.
 - **Live movement you can see:** Chances roll to their new values, every card has a 24-hour sparkline with
   **Δ 1h / Δ 24h**, and a **Heatmap** view shows your whole Watchlist's movement at once.
 - **A reason to come back:** a **"Since your last visit"** Recap lists what moved (and what Finished) while you were
@@ -65,8 +66,9 @@ Supabase Cron (every 10 s) ──► Edge Function sync-markets ──► Postgr
 
 | URL | What |
 |---|---|
-| `/` | Signed out: a carousel of the 5 trending topics (Events by 24-hour volume), a 3D globe of Markets by country and region with a place list and panel (a plain list on small screens or without WebGL), and a **Global** shelf. Signed in: your live **Watchlist**: the Recap, then live Markets in the order you followed them (as **Cards** or a **Heatmap**), triggered Alerts, and a collapsed **Finished (n)** with **Clear finished**. |
+| `/` | Signed out: Explore's content (below), then a short intro. Signed in: your live **Watchlist**: the Recap, then live Markets in the order you followed them (as **Cards** or a **Heatmap**), triggered Alerts, and a collapsed **Finished (n)** with **Clear finished**. |
 | `/browse?category=politics\|sports\|crypto\|finance\|tech\|world\|culture` | A grid of image cards grouped by Event, by 24-hour volume, with Follow. Open to everyone; a signed-out Follow signs you in and then follows. Prices as of page load, with Refresh. |
+| `/explore` | For everyone: a carousel of the 5 trending topics (Events by 24-hour volume), a 3D globe of Markets by country and region with a place list and panel (a plain list on small screens or without WebGL), and a **Global** shelf, with Follow. Prices as of page load, with Refresh. |
 | `/status` | The worker's last 20 Runs, live. |
 
 Every Market shows its image and both Outcomes as a split bar ("Yes 94.5 | 5.5 No", "Liquid 19.5 | 80.5 PARIVISION").

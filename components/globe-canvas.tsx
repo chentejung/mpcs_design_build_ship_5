@@ -1,62 +1,43 @@
 "use client";
 // The WebGL globe itself (react-globe.gl, which brings three.js). Only ever loaded in the browser, after mount,
-// through components/globe.tsx, so the server render and the build never touch WebGL. Country shapes are Natural
-// Earth's 110m admin-0 countries (public domain), served statically from /geo/countries-110m.json; no map tiles.
-// Everything is drawn in the neutral accent colour and the theme's panel colours (product rule 3: no green/red).
+// through components/globe.tsx, so the server render and the build never touch WebGL.
+//
+// The Earth is NASA's Blue Marble with a topology bump map, under a soft blue atmosphere, against a starfield; all
+// three images are self-hosted in public/globe/ (see its README for licences). Country shapes are Natural Earth's
+// 110m admin-0 countries (public domain) from /geo/countries-110m.json, drawn as nearly clear overlays on the photo;
+// countries with Markets get an indigo tint. Each place has a pulsing ring sized by its 24-hour volume, the busiest
+// get a label, and arcs link places that share a Market. The globe always sits in a dark "space" panel (in both
+// themes), so it uses the dark theme's lighter indigo; no green or red anywhere (product rule 3). Under reduced
+// motion nothing moves on its own: no auto-rotate, no rings, no dash animation, no fly-to.
 import GlobeGL, { type GlobeMethods } from "react-globe.gl";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GlobeProps } from "@/components/globe";
-import type { PlaceGroup } from "@/lib/places";
+import { placeInfo, type PlaceGroup, type SharedArc } from "@/lib/places";
 
 type Country = { type: "Feature"; properties: { ISO_A2: string | null; NAME: string }; geometry: unknown };
-type Theme = { accent: string; land: string; line: string; ink: string; surface: string };
+type Arc = SharedArc & { startLat: number; startLng: number; endLat: number; endLng: number };
+type OnGlobe = PlaceGroup & { lat: number; lng: number };
 
 const HEIGHT = 460;
+const LABELLED = 8;
+const FLY_MS = 1200;
+const ALTITUDE = 2.2;
 
-/** "#4f46e5" → "rgba(79, 70, 229, a)"; anything else is returned as is. */
-function withAlpha(color: string, alpha: number): string {
-  const hex = color.trim().match(/^#([0-9a-f]{6})$/i)?.[1];
-  if (!hex) return color;
-  const n = parseInt(hex, 16);
-  return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
-}
+// --color-accent and --color-accent-strong of the dark theme (app/globals.css): the panel is always dark. INDIGO
+// (Tailwind indigo-500, between the two themes' accents) tints the countries, so the photo still shows through.
+const INDIGO = "99, 102, 241";
+const ACCENT = "129, 140, 248";
+const ACCENT_STRONG = "165, 180, 252";
+const rgba = (rgb: string, a: number) => `rgba(${rgb}, ${a})`;
 
-/** A one-colour texture for the globe's surface, so its colour follows the theme without importing three.js. */
-function solid(color: string): string {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 2;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return "";
-  ctx.fillStyle = color;
-  ctx.fillRect(0, 0, 2, 2);
-  return canvas.toDataURL();
-}
+const TEXTURES = {
+  earth: "/globe/earth-blue-marble.jpg",
+  bump: "/globe/earth-topology.jpg",
+  sky: "/globe/night-sky.jpg",
+};
 
-function readTheme(): Theme {
-  const css = getComputedStyle(document.documentElement);
-  const v = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
-  const globe = v("--color-raised", "#eef0f6");
-  return {
-    accent: v("--color-accent", "#4f46e5"),
-    land: v("--color-panel", "#ffffff"),
-    line: v("--color-line", "#e1e4ec"),
-    ink: v("--color-ink", "#12161f"),
-    surface: solid(globe),
-  };
-}
-
-/** The theme's colours, re-read whenever the `dark` class on <html> changes. */
-function useTheme(): Theme | null {
-  const [theme, setTheme] = useState<Theme | null>(null);
-  useEffect(() => {
-    const update = () => setTheme(readTheme());
-    update();
-    const observer = new MutationObserver(update);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
-  }, []);
-  return theme;
-}
+// Init-only options: must be stable across renders.
+const RENDERER = { antialias: true, alpha: true, powerPreference: "high-performance" } as const;
 
 function useWidth(ref: React.RefObject<HTMLDivElement | null>): number {
   const [width, setWidth] = useState(0);
@@ -70,13 +51,21 @@ function useWidth(ref: React.RefObject<HTMLDivElement | null>): number {
   return width;
 }
 
-export default function GlobeCanvas({ places, selected, onSelect, autoRotate, reducedMotion }: GlobeProps) {
+const plural = (n: number) => `${n} Market${n === 1 ? "" : "s"}`;
+
+function tooltip(title: string, detail: string): string {
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+  return `<div style="padding:6px 10px;border-radius:8px;background:rgba(10,14,28,0.92);color:#e9edf4;border:1px solid rgba(${ACCENT},0.5);font:12px system-ui;box-shadow:0 4px 16px rgba(0,0,0,0.4)"><strong>${esc(title)}</strong><br/><span style="color:#a3adbd">${esc(detail)}</span></div>`;
+}
+
+export default function GlobeCanvas({ places, arcs, selected, onSelect, autoRotate, reducedMotion }: GlobeProps) {
   const globe = useRef<GlobeMethods | undefined>(undefined);
   const box = useRef<HTMLDivElement>(null);
   const width = useWidth(box);
-  const theme = useTheme();
   const [countries, setCountries] = useState<Country[]>([]);
   const [ready, setReady] = useState(false);
+  const [hovered, setHovered] = useState<string | null>(null);
+  const aimed = useRef(false);
 
   useEffect(() => {
     let live = true;
@@ -90,10 +79,33 @@ export default function GlobeCanvas({ places, selected, onSelect, autoRotate, re
   }, []);
 
   const byCode = useMemo(() => new Map(places.map((p) => [p.code, p])), [places]);
-  const onGlobe = useMemo(() => places.filter((p) => p.lat !== null && p.lng !== null), [places]);
+  const onGlobe = useMemo(
+    () => places.filter((p): p is OnGlobe => p.lat !== null && p.lng !== null),
+    [places],
+  );
   const maxVolume = useMemo(() => Math.max(1, ...onGlobe.map((p) => p.volume24h)), [onGlobe]);
+  const scale = useCallback((v: number) => Math.sqrt(v / maxVolume), [maxVolume]);
+  const labelled = useMemo(() => onGlobe.slice(0, LABELLED), [onGlobe]);
+  const rings = useMemo(() => (reducedMotion ? [] : onGlobe), [onGlobe, reducedMotion]);
 
-  // Gentle auto-rotation; the page turns it off under reduced motion and while a place is selected.
+  const arcData = useMemo<Arc[]>(
+    () =>
+      arcs.flatMap((a) => {
+        const from = placeInfo(a.from);
+        const to = placeInfo(a.to);
+        return from && to ? [{ ...a, startLat: from.lat, startLng: from.lng, endLat: to.lat, endLng: to.lng }] : [];
+      }),
+    [arcs],
+  );
+  const maxArc = useMemo(() => Math.max(1, ...arcData.map((a) => a.volume)), [arcData]);
+
+  // Cap the pixel ratio: a 3x phone or a 4K screen would otherwise render 9–16 pixels per CSS pixel.
+  useEffect(() => {
+    if (!globe.current || !ready) return;
+    globe.current.renderer().setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  }, [ready]);
+
+  // Gentle auto-rotation; the page turns it off under reduced motion and once a place is picked.
   useEffect(() => {
     if (!globe.current || !ready) return;
     const controls = globe.current.controls() as unknown as { autoRotate: boolean; autoRotateSpeed: number };
@@ -101,61 +113,172 @@ export default function GlobeCanvas({ places, selected, onSelect, autoRotate, re
     controls.autoRotateSpeed = 0.35;
   }, [ready, autoRotate]);
 
-  // Bring the selected place round to face the viewer; instantly under reduced motion (no fly-to).
+  // Open facing the selected (at first, the busiest) place, tilted toward it; then fly to each pick (instantly
+  // under reduced motion).
   useEffect(() => {
     const p = selected ? byCode.get(selected) : undefined;
     if (!globe.current || !ready || !p || p.lat === null || p.lng === null) return;
-    globe.current.pointOfView({ lat: p.lat, lng: p.lng, altitude: 2 }, reducedMotion ? 0 : 900);
+    const first = !aimed.current;
+    aimed.current = true;
+    globe.current.pointOfView({ lat: p.lat, lng: p.lng, altitude: ALTITUDE }, first || reducedMotion ? 0 : FLY_MS);
   }, [selected, byCode, ready, reducedMotion]);
 
-  if (!theme) return <div ref={box} style={{ height: HEIGHT }} />;
+  const codeOf = (d: object) => (d as Country).properties.ISO_A2 ?? "";
+  const capColor = useCallback(
+    (d: object) => {
+      const code = codeOf(d);
+      if (code === selected) return rgba(ACCENT, 0.42);
+      if (!byCode.has(code)) return "rgba(255, 255, 255, 0)";
+      return code === hovered ? rgba(ACCENT, 0.45) : rgba(INDIGO, 0.24);
+    },
+    [byCode, hovered, selected],
+  );
+  const sideColor = useCallback(
+    (d: object) => (byCode.has(codeOf(d)) ? rgba(INDIGO, 0.3) : "rgba(255, 255, 255, 0)"),
+    [byCode],
+  );
+  const strokeColor = useCallback(
+    (d: object) => (byCode.has(codeOf(d)) ? rgba(ACCENT_STRONG, 0.75) : "rgba(255, 255, 255, 0.14)"),
+    [byCode],
+  );
+  const altitude = useCallback(
+    (d: object) => {
+      const code = codeOf(d);
+      if (code === selected) return 0.03;
+      if (!byCode.has(code)) return 0.004;
+      return code === hovered ? 0.018 : 0.01;
+    },
+    [byCode, hovered, selected],
+  );
+  const polygonLabel = useCallback(
+    (d: object) => {
+      const p = byCode.get(codeOf(d));
+      return p ? tooltip(p.name, plural(p.count)) : "";
+    },
+    [byCode],
+  );
+  const onPolygonClick = useCallback(
+    (d: object) => {
+      const code = codeOf(d);
+      if (byCode.has(code)) onSelect(code);
+    },
+    [byCode, onSelect],
+  );
+  const onPolygonHover = useCallback(
+    (d: object | null) => {
+      const code = d ? codeOf(d) : null;
+      setHovered(code && byCode.has(code) ? code : null);
+    },
+    [byCode],
+  );
 
-  const capColor = (d: object) => {
-    const code = (d as Country).properties.ISO_A2;
-    if (code && code === selected) return withAlpha(theme.accent, 0.75);
-    if (code && byCode.has(code)) return withAlpha(theme.accent, 0.35);
-    return theme.land;
-  };
-  const label = (p: PlaceGroup) =>
-    `<div style="padding:4px 8px;border-radius:6px;background:${theme.land};color:${theme.ink};border:1px solid ${theme.line};font:12px system-ui">${p.name} · ${p.count} Market${p.count === 1 ? "" : "s"}</div>`;
+  const ringColor = useCallback(
+    (d: object) => {
+      const strong = (d as OnGlobe).code === selected;
+      return (t: number) => (strong ? `rgba(255, 255, 255, ${1 - t})` : rgba(ACCENT_STRONG, 0.9 * (1 - t)));
+    },
+    [selected],
+  );
+  const ringRadius = useCallback((d: object) => 2.5 + 5 * scale((d as OnGlobe).volume24h), [scale]);
+  const ringPeriod = useCallback((d: object) => 1400 - 600 * scale((d as OnGlobe).volume24h), [scale]);
+
+  const pointColor = useCallback(
+    (d: object) => ((d as OnGlobe).code === selected ? "#ffffff" : rgba(ACCENT_STRONG, 0.95)),
+    [selected],
+  );
+  const pointAltitude = useCallback((d: object) => 0.04 + 0.1 * scale((d as OnGlobe).volume24h), [scale]);
+  const pointRadius = useCallback(
+    (d: object) => ((d as OnGlobe).kind === "region" ? 0.55 : 0.35) * ((d as OnGlobe).code === selected ? 1.4 : 1),
+    [selected],
+  );
+  const pointLabel = useCallback((d: object) => tooltip((d as OnGlobe).name, plural((d as OnGlobe).count)), []);
+  const onPointClick = useCallback((d: object) => onSelect((d as OnGlobe).code), [onSelect]);
+
+  const labelText = useCallback((d: object) => `${(d as OnGlobe).name} (${(d as OnGlobe).count})`, []);
+  const labelColor = useCallback(
+    (d: object) => ((d as OnGlobe).code === selected ? "#ffffff" : "rgba(233, 237, 244, 0.85)"),
+    [selected],
+  );
+  const labelSize = useCallback((d: object) => 1.1 + 0.8 * scale((d as OnGlobe).volume24h), [scale]);
+  const onLabelClick = onPointClick;
+
+  const arcColor = useCallback(() => ["rgba(255, 255, 255, 0.85)", rgba(ACCENT_STRONG, 0.9)], []);
+  const arcStroke = useCallback((d: object) => 0.25 + 0.9 * Math.sqrt((d as Arc).volume / maxArc), [maxArc]);
+  const arcLabel = useCallback((d: object) => {
+    const a = d as Arc;
+    return tooltip(`${placeInfo(a.from)?.name} ↔ ${placeInfo(a.to)?.name}`, `${plural(a.count)} about both`);
+  }, []);
 
   return (
-    <div ref={box} className="cursor-grab active:cursor-grabbing" data-testid="globe-canvas">
+    <div
+      ref={box}
+      className="relative h-[460px] cursor-grab overflow-hidden rounded-2xl bg-[#04060c] shadow-card ring-1 ring-black/10 active:cursor-grabbing dark:ring-white/10"
+      data-testid="globe-canvas"
+    >
       {width > 0 ? (
         <GlobeGL
           ref={globe}
           width={width}
           height={HEIGHT}
-          backgroundColor="rgba(0,0,0,0)"
-          globeImageUrl={theme.surface || null}
+          rendererConfig={RENDERER}
+          animateIn={!reducedMotion}
+          backgroundColor="#04060c"
+          backgroundImageUrl={TEXTURES.sky}
+          globeImageUrl={TEXTURES.earth}
+          bumpImageUrl={TEXTURES.bump}
           showAtmosphere
-          atmosphereColor={theme.accent}
-          atmosphereAltitude={0.12}
+          atmosphereColor="#7cc4ff"
+          atmosphereAltitude={0.2}
           onGlobeReady={() => setReady(true)}
           polygonsData={countries}
           polygonCapColor={capColor}
-          polygonSideColor={() => withAlpha(theme.line, 0.4)}
-          polygonStrokeColor={() => theme.line}
-          polygonAltitude={(d: object) => ((d as Country).properties.ISO_A2 === selected ? 0.02 : 0.006)}
+          polygonSideColor={sideColor}
+          polygonStrokeColor={strokeColor}
+          polygonAltitude={altitude}
           polygonsTransitionDuration={reducedMotion ? 0 : 300}
-          polygonLabel={(d: object) => {
-            const p = byCode.get((d as Country).properties.ISO_A2 ?? "");
-            return p ? label(p) : "";
-          }}
-          onPolygonClick={(d: object) => {
-            const code = (d as Country).properties.ISO_A2;
-            if (code && byCode.has(code)) onSelect(code);
-          }}
+          polygonLabel={polygonLabel}
+          onPolygonClick={onPolygonClick}
+          onPolygonHover={onPolygonHover}
+          ringsData={rings}
+          ringLat="lat"
+          ringLng="lng"
+          ringColor={ringColor}
+          ringMaxRadius={ringRadius}
+          ringPropagationSpeed={2}
+          ringRepeatPeriod={ringPeriod}
+          ringAltitude={0.035}
           pointsData={onGlobe}
-          pointLat={(d: object) => (d as PlaceGroup).lat!}
-          pointLng={(d: object) => (d as PlaceGroup).lng!}
-          pointColor={(d: object) => ((d as PlaceGroup).code === selected ? theme.ink : theme.accent)}
-          pointAltitude={(d: object) => 0.03 + 0.3 * Math.sqrt((d as PlaceGroup).volume24h / maxVolume)}
-          pointRadius={(d: object) => ((d as PlaceGroup).kind === "region" ? 1.1 : 0.7)}
+          pointLat="lat"
+          pointLng="lng"
+          pointColor={pointColor}
+          pointAltitude={pointAltitude}
+          pointRadius={pointRadius}
           pointsMerge={false}
           pointsTransitionDuration={reducedMotion ? 0 : 500}
-          pointLabel={(d: object) => label(d as PlaceGroup)}
-          onPointClick={(d: object) => onSelect((d as PlaceGroup).code)}
+          pointLabel={pointLabel}
+          onPointClick={onPointClick}
+          labelsData={labelled}
+          labelLat="lat"
+          labelLng="lng"
+          labelText={labelText}
+          labelColor={labelColor}
+          labelSize={labelSize}
+          labelDotRadius={0.3}
+          labelAltitude={0.04}
+          labelResolution={2}
+          labelsTransitionDuration={reducedMotion ? 0 : 500}
+          onLabelClick={onLabelClick}
+          arcsData={arcData}
+          arcColor={arcColor}
+          arcStroke={arcStroke}
+          arcStartAltitude={0.012}
+          arcEndAltitude={0.012}
+          arcAltitudeAutoScale={0.25}
+          arcDashLength={0.45}
+          arcDashGap={0.2}
+          arcDashAnimateTime={reducedMotion ? 0 : 2600}
+          arcsTransitionDuration={reducedMotion ? 0 : 600}
+          arcLabel={arcLabel}
         />
       ) : null}
     </div>

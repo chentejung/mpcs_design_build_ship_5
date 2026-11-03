@@ -1,16 +1,25 @@
 "use client";
-// The signed-out landing page's centrepiece (issue #15): a globe of Markets by place, the plain list of places,
-// the selected place's Markets, and the Global shelf. Static like Browse: Prices as of page load. The globe is
-// only tried on wide screens with WebGL; the list and panel work without it. It turns gently until the visitor
-// picks a place, and never under reduced motion (product rule 3).
+// The centrepiece of the signed-out landing page and of Explore (issue #15): a globe of Markets by place, the plain
+// list of places, the selected place's Markets, and the Global shelf. Static like Browse: Prices as of page load.
+// The globe is only tried on wide screens with WebGL; the list and panel work without it. It turns gently until the
+// visitor picks a place, and never under reduced motion (product rule 3).
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { Globe, subscribeGlobeSupport, supportsGlobe } from "@/components/globe";
-import { GlobalShelf, PlaceList, PlacePanel } from "@/components/place-panel";
+import { GlobalShelf, PlaceList, PlacePanel, SIGNED_OUT, type Viewer } from "@/components/place-panel";
 import { useReducedMotion } from "@/components/use-reduced-motion";
-import { groupByPlace, type PlacedMarket } from "@/lib/places";
+import { groupByPlace, sharedArcs, type PlacedMarket } from "@/lib/places";
 
-export function PlaceExplorer({ markets, renderedAt }: { markets: readonly PlacedMarket[]; renderedAt: string }) {
+export function PlaceExplorer({
+  markets,
+  renderedAt,
+  viewer = SIGNED_OUT,
+}: {
+  markets: readonly PlacedMarket[];
+  renderedAt: string;
+  viewer?: Viewer;
+}) {
   const { places, global } = useMemo(() => groupByPlace(markets), [markets]);
+  const arcs = useMemo(() => sharedArcs(markets), [markets]);
   const now = useMemo(() => new Date(renderedAt), [renderedAt]);
   const reduced = useReducedMotion();
   const canGlobe = useSyncExternalStore(subscribeGlobeSupport, supportsGlobe, () => false);
@@ -42,6 +51,7 @@ export function PlaceExplorer({ markets, renderedAt }: { markets: readonly Place
               {showGlobe ? (
                 <Globe
                   places={places}
+                  arcs={arcs}
                   selected={selected}
                   onSelect={setPicked}
                   autoRotate={!reduced && picked === null}
@@ -51,11 +61,11 @@ export function PlaceExplorer({ markets, renderedAt }: { markets: readonly Place
               ) : null}
               <PlaceList places={places} selected={selected} onSelect={setPicked} />
             </div>
-            <PlacePanel place={place} now={now} />
+            <PlacePanel place={place} now={now} viewer={viewer} />
           </div>
         ) : null}
       </section>
-      <GlobalShelf global={global} now={now} />
+      <GlobalShelf global={global} now={now} viewer={viewer} />
     </div>
   );
 }

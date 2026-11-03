@@ -1,14 +1,16 @@
 "use client";
-// The landing page's globe, loaded only in the browser (next/dynamic, ssr: false), so three.js stays out of the
+// The globe on the landing page and Explore, loaded only in the browser (next/dynamic, ssr: false), so three.js stays out of the
 // server render, the build's server bundle and the page's first-load JavaScript. If WebGL fails to start, the
 // error boundary hands back to the page, which keeps the plain list of places.
 import dynamic from "next/dynamic";
 import { Component, type ReactNode } from "react";
-import type { PlaceGroup } from "@/lib/places";
+import type { PlaceGroup, SharedArc } from "@/lib/places";
 
 export type GlobeProps = {
   /** Countries and regions with Markets (Global isn't on the globe). */
   places: readonly PlaceGroup[];
+  /** Pairs of places that share Markets, busiest first (`sharedArcs`). */
+  arcs: readonly SharedArc[];
   selected: string | null;
   onSelect: (code: string) => void;
   autoRotate: boolean;
@@ -26,8 +28,10 @@ function GlobePlaceholder() {
     <div
       role="status"
       aria-label="Loading the globe"
-      className="mx-auto aspect-square h-[460px] max-w-full animate-pulse rounded-full bg-raised motion-reduce:animate-none"
-    />
+      className="flex h-[460px] items-center justify-center overflow-hidden rounded-2xl bg-[#04060c]"
+    >
+      <div className="aspect-square h-[70%] animate-pulse rounded-full bg-[#1b2a4a] motion-reduce:animate-none" />
+    </div>
   );
 }
 

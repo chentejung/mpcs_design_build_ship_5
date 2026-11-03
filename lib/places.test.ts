@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { Market } from "./markets";
-import { COUNTRIES, groupByPlace, placeInfo, REGIONS, type PlacedMarket } from "./places";
+import { COUNTRIES, groupByPlace, placeInfo, REGIONS, sharedArcs, type PlacedMarket } from "./places";
 
 function market(over: Partial<PlacedMarket> & { id: string }): PlacedMarket {
   const base: Market = {
@@ -107,5 +107,57 @@ describe("groupByPlace", () => {
     const { places, global } = groupByPlace([]);
     expect(places).toEqual([]);
     expect(global.count).toBe(0);
+  });
+});
+
+describe("sharedArcs", () => {
+  it("links the places each Market shares, busiest first", () => {
+    expect(
+      sharedArcs([
+        market({ id: "1", places: ["US", "IR"], volume_24h: 500 }),
+        market({ id: "2", places: ["IL", "IR"], volume_24h: 900 }),
+      ]),
+    ).toEqual([
+      { from: "IL", to: "IR", volume: 900, count: 1 },
+      { from: "IR", to: "US", volume: 500, count: 1 },
+    ]);
+  });
+
+  it("merges the same pair whatever order the places come in", () => {
+    expect(
+      sharedArcs([
+        market({ id: "1", places: ["US", "IR"], volume_24h: 500 }),
+        market({ id: "2", places: ["IR", "US", "IR"], volume_24h: 250 }),
+      ]),
+    ).toEqual([{ from: "IR", to: "US", volume: 750, count: 2 }]);
+  });
+
+  it("links every pair of a Market's places, regions included, and skips unknown codes", () => {
+    expect(sharedArcs([market({ id: "1", places: ["IR", "region:middle-east", "ZZ", "IL"], volume_24h: 100 })])).toEqual([
+      { from: "IL", to: "IR", volume: 100, count: 1 },
+      { from: "IL", to: "region:middle-east", volume: 100, count: 1 },
+      { from: "IR", to: "region:middle-east", volume: 100, count: 1 },
+    ]);
+  });
+
+  it("gives none for Global and single-place Markets", () => {
+    expect(
+      sharedArcs([
+        market({ id: "1", places: [], volume_24h: 900 }),
+        market({ id: "2", places: ["US"], volume_24h: 900 }),
+        market({ id: "3", places: ["US", "ZZ"], volume_24h: 900 }),
+        market({ id: "4", places: null, volume_24h: 900 }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("keeps only the busiest arcs, at most 15 by default", () => {
+    const others = Object.keys(COUNTRIES).filter((c) => c !== "US");
+    const many = Array.from({ length: 20 }, (_, i) => market({ id: String(i), places: ["US", others[i]], volume_24h: 1000 - i }));
+    const arcs = sharedArcs(many);
+    expect(arcs).toHaveLength(15);
+    expect(arcs[0].volume).toBe(1000);
+    expect(arcs[14].volume).toBe(986);
+    expect(sharedArcs(many, 2).map((a) => a.volume)).toEqual([1000, 999]);
   });
 });
