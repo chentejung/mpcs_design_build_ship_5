@@ -135,7 +135,9 @@ do $$ declare n int; begin
       'outcomes','["Yes","No"]'::jsonb,'token_id','tc'||c,'price',0.5,'volume_24h',1,
       'end_date','2026-12-01','closed',false,'in_catalog',true))
      from unnest(array['finance','tech','world','culture']) c)));
-  assert n = 4, 'four new-Category Markets should be inserted, got '||n;
+  -- n also counts real Markets of those Categories marked as dropped out, so check the test rows themselves.
+  assert (select count(*) from public.markets where id in ('cfinance','ctech','cworld','cculture') and in_catalog) = 4,
+    'the four new-Category Markets should be in the Catalog';
   assert (select count(distinct category) from public.markets where id like 'm%' or id like 'c%') = 6,
     'politics, crypto and the four new Categories';
   begin
