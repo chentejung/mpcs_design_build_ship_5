@@ -6,10 +6,10 @@ data is fresh, stale or down. Nobody trades here.
 
 Where Polymarket is built for betting, Odds Desk is built for **watching**:
 
-- **A world view:** the landing page (and, signed in, the **Explore** tab) opens on a banner of the 5 busiest topics
-  right now, then a 3D globe of Markets by place (from gamma's own tags) on NASA's Blue Marble, with pulsing rings,
-  labels and arcs between places that share a Market: pick a country or region to see its Markets; placeless ones
-  sit on a **Global** shelf.
+- **A world view, first:** the **Explore** tab, first in the nav and open to everyone, opens on a banner of the 5
+  busiest topics right now, then a 3D globe of Markets by place (from gamma's own tags) on NASA's Blue Marble, with
+  pulsing rings, labels and arcs between places that share a Market: pick a country or region to see its Markets;
+  placeless ones sit on a **Global** shelf. The signed-out landing page shows the same.
 - **Live movement you can see:** Chances roll to their new values, every card has a 24-hour sparkline with
   **Δ 1h / Δ 24h**, and a **Heatmap** view shows your whole Watchlist's movement at once.
 - **A reason to come back:** a **"Since your last visit"** Recap lists what moved (and what Finished) while you were
@@ -64,11 +64,14 @@ Supabase Cron (every 10 s) ──► Edge Function sync-markets ──► Postgr
 
 ## Pages
 
+The nav reads **Explore · Watchlist · Browse · Status**. Watchlist appears only once you're signed in (signed out, `/`
+is the landing page), so a visitor sees **Explore · Browse · Status**.
+
 | URL | What |
 |---|---|
-| `/` | Signed out: Explore's content (below), then a short intro. Signed in: your live **Watchlist**: the Recap, then live Markets in the order you followed them (as **Cards** or a **Heatmap**), triggered Alerts, and a collapsed **Finished (n)** with **Clear finished**. |
+| `/explore` | **For everyone, first in the nav:** a carousel of the 5 trending topics (Events by 24-hour volume), then a 3D globe of Markets by country and region (Blue Marble Earth, atmosphere, tinted countries, pulsing rings, labels, and arcs between places that share a Market), with a place list and a panel of that place's Markets with Follow, and a **Global** shelf. Small screens or no WebGL get the list and panel only; reduced motion stops the rotation, rings and arc animation. Prices as of page load, with Refresh. A signed-out Follow signs you in and comes back to Explore. |
+| `/` | Signed out: the landing page, with Explore's content (above) and a short intro; no Watchlist. Signed in: your live **Watchlist**: the Recap, then live Markets in the order you followed them (as **Cards** or a **Heatmap**), triggered Alerts, and a collapsed **Finished (n)** with **Clear finished**. |
 | `/browse?category=politics\|sports\|crypto\|finance\|tech\|world\|culture` | A grid of image cards grouped by Event, by 24-hour volume, with Follow. Open to everyone; a signed-out Follow signs you in and then follows. Prices as of page load, with Refresh. |
-| `/explore` | For everyone: a carousel of the 5 trending topics (Events by 24-hour volume), a 3D globe of Markets by country and region with a place list and panel (a plain list on small screens or without WebGL), and a **Global** shelf, with Follow. Prices as of page load, with Refresh. |
 | `/status` | The worker's last 20 Runs, live. |
 
 Every Market shows its image and both Outcomes as a split bar ("Yes 94.5 | 5.5 No", "Liquid 19.5 | 80.5 PARIVISION").
@@ -107,7 +110,9 @@ The worker runs on Supabase, not locally; the local app reads the same live data
     checks what a user sees: the split, rolling Chances, direction colours, Fresh / Stale / Down and the heartbeat,
     refetch on reconnect, sparklines and Δ, Alerts and the live alert toast, the Recap and Replay, the Heatmap, and
     reduced motion. Also Browse
-    cards and Category tabs, and the theme toggle.
+    cards and Category tabs, the theme toggle, the nav (Explore first; no Watchlist signed out), the trending
+    banner, and Explore: places, arcs, the place list and panel, the Global shelf and Follow (the WebGL globe itself
+    is mocked).
 - `supabase/tests/checks.sql`, run through the Supabase MCP in a rolled-back transaction: the same Prices sent twice
   change 0 rows the second time; user B can't see, delete or update user A's Follow; the 26th Follow is rejected;
   signed-out visitors can read only Markets and Runs; all seven Categories are accepted; an Alert fires exactly once
@@ -126,4 +131,5 @@ The worker runs on Supabase, not locally; the local app reads the same live data
 | `supabase/functions/sync-markets/` | The worker: `index.ts` (Deno) and `logic.ts` (pure, tested) |
 | `supabase/tests/checks.sql` | The SQL checks |
 | `test/` | UI test setup and the fake live feed |
+| `public/geo/`, `public/globe/` | Country shapes (Natural Earth, public domain) and the globe's Earth, terrain and starfield images (NASA Blue Marble, public domain; three-globe examples, MIT) |
 | `docs/` | Plan, v2 redesign plan, data-flow chart, source notes |
