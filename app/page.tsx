@@ -3,6 +3,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { WatchlistLive } from "@/components/watchlist-live";
+import { ALERT_COLUMNS, toAlert, type Alert } from "@/lib/alerts";
 import { MARKET_COLUMNS } from "@/lib/markets";
 import { RUN_COLUMNS, RUN_LOG_SIZE } from "@/lib/runs";
 import { supabase } from "@/lib/supabase";
@@ -23,13 +24,15 @@ async function HomeForViewer() {
 
   await connection();
   const db = supabase();
-  const [follows, runs] = await Promise.all([
-    // RLS returns only this user's Follows.
+  const [follows, runs, alerts] = await Promise.all([
+    // RLS returns only this user's Follows and Alerts.
     db.from("follows").select(`created_at, markets!inner(${MARKET_COLUMNS})`).order("created_at"),
     db.from("worker_runs").select(RUN_COLUMNS).order("started_at", { ascending: false }).limit(RUN_LOG_SIZE),
+    db.from("alerts").select(ALERT_COLUMNS).order("created_at"),
   ]);
   if (follows.error) throw new Error(`Couldn't load your Watchlist: ${follows.error.message}`);
   if (runs.error) throw new Error(`Couldn't load the feed status: ${runs.error.message}`);
+  if (alerts.error) throw new Error(`Couldn't load your alerts: ${alerts.error.message}`);
 
   const items = toFollowed(follows.data as unknown as FollowRow[]);
   // A new set of Follows starts a fresh live view with its own Realtime filter.
@@ -38,6 +41,7 @@ async function HomeForViewer() {
       key={items.map((m) => m.id).join(",")}
       initialItems={items}
       initialRuns={runs.data}
+      initialAlerts={(alerts.data as Alert[]).map(toAlert)}
       renderedAt={new Date().toISOString()}
     />
   );

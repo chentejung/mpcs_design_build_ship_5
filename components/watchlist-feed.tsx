@@ -4,12 +4,18 @@
 // ids) and `worker_runs` INSERTs. UI tests provide a fake through WatchlistFeedProvider.
 import { createContext, useContext } from "react";
 import { useRealtimeChannel, type Connection } from "@/components/use-realtime";
+import { ALERT_COLUMNS, type Alert } from "@/lib/alerts";
 import { MARKET_COLUMNS, type Market } from "@/lib/markets";
 import { RUN_COLUMNS, RUN_LOG_SIZE, type Run } from "@/lib/runs";
 import { useSupabaseBrowser } from "@/lib/supabase-browser";
 import { marketsFilter, type FollowRow } from "@/lib/watchlist";
 
-export type WatchlistSnapshot = { follows: FollowRow[] | null; runs: Run[] | null };
+export type WatchlistSnapshot = {
+  follows: FollowRow[] | null;
+  runs: Run[] | null;
+  /** The user's Alerts (RLS); alerts isn't on Realtime, so this is how triggered_at arrives. */
+  alerts?: Alert[] | null;
+};
 
 export type WatchlistFeedArgs = {
   /** The followed Market ids, fixed for the life of the view. */
@@ -22,7 +28,7 @@ export type WatchlistFeedArgs = {
 
 export type WatchlistFeed = {
   connection: Connection;
-  /** The user's Follows (RLS) and the latest Runs, or nulls if they couldn't be read. */
+  /** The user's Follows and Alerts (RLS) and the latest Runs, or nulls if they couldn't be read. */
   loadSnapshot(): Promise<WatchlistSnapshot>;
 };
 
@@ -48,12 +54,17 @@ export const useSupabaseWatchlistFeed: UseWatchlistFeed = ({ marketIds, onMarket
   );
 
   const loadSnapshot = async (): Promise<WatchlistSnapshot> => {
-    if (!db) return { follows: null, runs: null };
-    const [follows, runs] = await Promise.all([
+    if (!db) return { follows: null, runs: null, alerts: null };
+    const [follows, runs, alerts] = await Promise.all([
       db.from("follows").select(`created_at, markets!inner(${MARKET_COLUMNS})`).order("created_at"),
       db.from("worker_runs").select(RUN_COLUMNS).order("started_at", { ascending: false }).limit(RUN_LOG_SIZE),
+      db.from("alerts").select(ALERT_COLUMNS).order("created_at"),
     ]);
-    return { follows: (follows.data as unknown as FollowRow[] | null) ?? null, runs: runs.data ?? null };
+    return {
+      follows: (follows.data as unknown as FollowRow[] | null) ?? null,
+      runs: runs.data ?? null,
+      alerts: (alerts.data as Alert[] | null) ?? null,
+    };
   };
 
   return { connection, loadSnapshot };

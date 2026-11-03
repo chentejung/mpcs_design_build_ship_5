@@ -7,9 +7,11 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { clearFinished } from "@/app/actions/follows";
 import { FreshnessView, isMuted } from "@/components/freshness";
+import { TriggeredAlerts } from "@/components/triggered-alerts";
 import { useNow } from "@/components/use-now";
 import { WatchCard } from "@/components/watch-card";
 import { useWatchlistFeed } from "@/components/watchlist-feed";
+import { toAlert, type Alert } from "@/lib/alerts";
 import { freshness } from "@/lib/freshness";
 import { mergeRuns, type Run } from "@/lib/runs";
 import { applyMarketUpdate, FOLLOW_LIMIT, splitWatchlist, toFollowed, type Followed } from "@/lib/watchlist";
@@ -17,16 +19,20 @@ import { applyMarketUpdate, FOLLOW_LIMIT, splitWatchlist, toFollowed, type Follo
 export function WatchlistLive({
   initialItems,
   initialRuns,
+  initialAlerts = [],
   renderedAt,
 }: {
   initialItems: Followed[];
   initialRuns: Run[];
+  /** The user's Alerts (not on Realtime: triggered_at arrives with each snapshot refetch). */
+  initialAlerts?: Alert[];
   renderedAt: string;
 }) {
   const router = useRouter();
   const now = useNow(renderedAt);
   const [items, setItems] = useState(initialItems);
   const [runs, setRuns] = useState(initialRuns);
+  const [alerts, setAlerts] = useState(initialAlerts);
   const [clearing, startClearing] = useTransition();
   const [ids] = useState(() => initialItems.map((m) => m.id));
 
@@ -49,7 +55,17 @@ export function WatchlistLive({
       }));
     }
     if (snapshot.runs) setRuns((current) => mergeRuns(current, snapshot.runs!));
+    if (snapshot.alerts) setAlerts(snapshot.alerts.map(toAlert));
   };
+
+  const alertAdded = (alert: Alert) => setAlerts((current) => [...current, alert]);
+  const alertDeleted = (id: number) => setAlerts((current) => current.filter((a) => a.id !== id));
+  const alertsOf = (marketId: string) => alerts.filter((a) => a.market_id === marketId);
+  const cardAlerts = (marketId: string) => ({
+    alerts: alertsOf(marketId),
+    onAlertAdded: alertAdded,
+    onAlertDeleted: alertDeleted,
+  });
 
   const f = freshness(runs, now, connection !== "lost");
   const muted = isMuted(f);
@@ -86,13 +102,15 @@ export function WatchlistLive({
         <>
           {live.length > 0 ? (
             <ul className="mt-6 grid gap-3 md:grid-cols-2">
-              {live.map((m) => <WatchCard key={m.id} market={m} now={now} muted={muted} />)}
+              {live.map((m) => <WatchCard key={m.id} market={m} now={now} muted={muted} {...cardAlerts(m.id)} />)}
             </ul>
           ) : (
             <p className="mt-6 text-sm text-dim">
               Nothing live right now. <Link href="/browse" className="text-ink underline underline-offset-2">Browse Markets</Link>
             </p>
           )}
+
+          <TriggeredAlerts alerts={alerts} items={items} now={now} onDeleted={alertDeleted} />
 
           {finished.length > 0 ? (
             <details className="mt-8 rounded-lg border border-line">
@@ -111,7 +129,7 @@ export function WatchlistLive({
                   </button>
                 </div>
                 <ul className="mt-3 grid gap-3 md:grid-cols-2">
-                  {finished.map((m) => <WatchCard key={m.id} market={m} now={now} muted={false} />)}
+                  {finished.map((m) => <WatchCard key={m.id} market={m} now={now} muted={false} {...cardAlerts(m.id)} />)}
                 </ul>
               </div>
             </details>

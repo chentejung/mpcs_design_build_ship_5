@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      alerts: {
+        Row: {
+          created_at: string
+          direction: string
+          id: number
+          market_id: string
+          threshold: number
+          triggered_at: string | null
+          triggered_price: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          direction: string
+          id?: never
+          market_id: string
+          threshold: number
+          triggered_at?: string | null
+          triggered_price?: number | null
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          direction?: string
+          id?: never
+          market_id?: string
+          threshold?: number
+          triggered_at?: string | null
+          triggered_price?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alerts_user_id_market_id_fkey"
+            columns: ["user_id", "market_id"]
+            isOneToOne: false
+            referencedRelation: "follows"
+            referencedColumns: ["user_id", "market_id"]
+          },
+        ]
+      }
       follows: {
         Row: {
           created_at: string
