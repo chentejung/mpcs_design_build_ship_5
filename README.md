@@ -1,8 +1,18 @@
 # Odds Desk
 
-A read-only watchlist of Polymarket prediction markets. Follow up to 25 Politics, Sports, Crypto, Finance, Tech, World and Culture Markets and watch
-the crowd's Chance on each one move live, with a clear sign of whether the data is fresh, stale or down. Nobody trades
-here.
+A read-only watchlist of Polymarket prediction markets. Follow up to 25 Markets across Politics, Sports, Crypto,
+Finance, Tech, World and Culture and watch the crowd's Chance on each one move live, with a clear sign of whether the
+data is fresh, stale or down. Nobody trades here.
+
+Where Polymarket is built for betting, Odds Desk is built for **watching**:
+
+- **Live movement you can see:** Chances roll to their new values, every card has a 24-hour sparkline with
+  **Δ 1h / Δ 24h**, and a **Heatmap** view shows your whole Watchlist's movement at once.
+- **A reason to come back:** a **"Since your last visit"** Recap lists what moved (and what Finished) while you were
+  away, with a **Replay** of the moves.
+- **Price alerts:** "tell me when Yes is above 60%". Each alert is a dashed line on its card and fires once, in the app.
+- **Always honest about freshness:** a heartbeat beats once per Run and goes flat amber when Stale, red when Down.
+- **Neutral by design:** green/red only for direction on Yes/No Markets; team-vs-team Markets stay neutral.
 
 MPCS 51238 Design, Build, Ship, Assignment 5: Live Data System.
 
@@ -27,29 +37,40 @@ Supabase Cron (every 10 s) ──► Edge Function sync-markets ──► Postgr
    values are actually different. Each Run records itself in `worker_runs` (ok / failed / skipped, rows changed,
    duration, warnings, error). The worker writes with the Supabase secret key, which exists only in the function's
    environment.
-3. **Database.** Postgres with row-level security on every table. Anyone can read Markets and Runs; only you can see,
-   add or remove your own Follows (`user_id` comes from your Clerk sign-in token, never from app code). A trigger stops
-   a 26th Follow.
+3. **Database.** Postgres with row-level security on every table. Anyone can read Markets and Runs; only you can see
+   and change your own Follows, Alerts and last visit (`user_id` comes from your Clerk sign-in token, never from app
+   code). Triggers stop a 26th Follow and a 4th Alert on one Market (or a 51st overall). An Alert can exist only on a
+   Market you Follow, and Unfollowing deletes it. When `apply_prices` saves a changed Price, it also marks any Alert
+   that Price crossed, once.
 4. **Live page.** The Watchlist subscribes through Supabase Realtime to changes on just the Markets you follow, plus new
-   Runs. It refetches its data every time it (re)connects, because Realtime doesn't replay what was missed, and it keeps
-   the Clerk token fresh so updates keep flowing.
-5. **Freshness.** One rule set (`lib/freshness.ts`) everywhere:
+   Runs; nothing else is published. On load (and every time it reconnects, because Realtime doesn't replay what was
+   missed) it reads your Follows with their last 24 h of `price_history`, your Alerts and the latest Runs; live Price
+   updates then extend each sparkline in place. It keeps the Clerk token fresh so updates keep flowing.
+5. **Recap.** Opening the Watchlist reads when you were last here (`visits`) and the Prices at that moment, shows what
+   moved by 2+ points since, then records this visit. History is kept 7 days, so a longer absence is recapped from 7
+   days back, and says so.
+6. **Freshness.** One rule set (`lib/freshness.ts`) everywhere:
    - **Live**: the last ok Run was under 30 s ago.
    - **Stale** (amber; Chances greyed): no ok Run for 30 s, or the live connection dropped.
    - **Down** (red): the latest Run failed, with the error and a link to `/status`.
+   - The same state drives a small **heartbeat** next to it on the Watchlist, Browse and `/status`.
    - Each card also shows when it last **Moved**, so a quiet Market isn't mistaken for a stale system.
 
 ## Pages
 
 | URL | What |
 |---|---|
-| `/` | Signed out: a short intro. Signed in: your live **Watchlist**: live Markets in the order you followed them, then a collapsed **Finished (n)** with **Clear finished**. |
-| `/browse?category=politics\|sports\|crypto` | Markets grouped by Event, by 24-hour volume, with Follow. Open to everyone; a signed-out Follow signs you in and then follows. Prices as of page load, with Refresh. |
+| `/` | Signed out: an intro with the busiest Markets right now. Signed in: your live **Watchlist**: the Recap, then live Markets in the order you followed them (as **Cards** or a **Heatmap**), triggered Alerts, and a collapsed **Finished (n)** with **Clear finished**. |
+| `/browse?category=politics\|sports\|crypto\|finance\|tech\|world\|culture` | A grid of image cards grouped by Event, by 24-hour volume, with Follow. Open to everyone; a signed-out Follow signs you in and then follows. Prices as of page load, with Refresh. |
 | `/status` | The worker's last 20 Runs, live. |
 
-Every Market shows both Outcomes as a split bar ("Yes 94.5 | 5.5 No", "Liquid 19.5 | 80.5 PARIVISION"). Green and red
-are used only for Yes/No Markets, so the app never looks like it's rooting for a team. A card flashes only when its
-displayed Chance moves by at least 0.1 point, and the flash respects reduced-motion settings.
+Every Market shows its image and both Outcomes as a split bar ("Yes 94.5 | 5.5 No", "Liquid 19.5 | 80.5 PARIVISION").
+Green and red are used only for Yes/No Markets, so the app never looks like it's rooting for a team; the brand accent
+is indigo. When the displayed Chance moves by at least 0.1 point, both Chances roll to their new values and the bar
+glides. With reduced motion set, values change instantly and nothing animates.
+
+The app is light by default with a dark theme (☀ / ☾ in the header); the choice is remembered and applied before the
+page paints, and Clerk's sign-in follows it.
 
 ## Stack
 
@@ -68,14 +89,24 @@ The worker runs on Supabase, not locally; the local app reads the same live data
 
 ## Tests
 
-- `npm run test:unit`: vitest on pure logic. The worker's parsing runs against **real saved Polymarket responses** in
-  `supabase/functions/sync-markets/fixtures/` (Yes/No, team-name, Over/Under and Up/Down Markets, grouped Markets,
-  Markets ending within the hour dropped, games in play kept, malformed fields skipped, bad midpoints rejected); plus
-  Freshness, the split-bar numbers, the flash rule, grouping and the Watchlist order.
+- `npm run test:unit` runs two vitest projects:
+  - **logic** (Node): the worker's parsing against **real saved Polymarket responses** in
+    `supabase/functions/sync-markets/fixtures/` (Yes/No, team-name, Over/Under and Up/Down Markets, grouped Markets,
+    Markets ending within the hour dropped, games in play kept, malformed fields skipped, bad midpoints rejected, and
+    all seven Category lists, including real Markets listed in two Categories); plus Freshness, the split-bar
+    numbers, the roll rule, grouping, the Watchlist order, price history and Δ, Alerts, the Recap and the Heatmap.
+  - **ui** (jsdom + React Testing Library): the live Watchlist rendered whole, with Supabase and Realtime replaced by a
+    fake feed (`test/fake-feed.tsx`) that pushes Price updates and Runs and drops or restores the connection. It
+    checks what a user sees: the split, rolling Chances, direction colours, Fresh / Stale / Down and the heartbeat,
+    refetch on reconnect, sparklines and Δ, Alerts, the Recap and Replay, the Heatmap, and reduced motion. Also Browse
+    cards and Category tabs, and the theme toggle.
 - `supabase/tests/checks.sql`, run through the Supabase MCP in a rolled-back transaction: the same Prices sent twice
   change 0 rows the second time; user B can't see, delete or update user A's Follow; the 26th Follow is rejected;
-  signed-out visitors can read only Markets and Runs.
-- Checked in a real browser with two Clerk test users: sign-in-then-follow, each user sees only their own Watchlist,
+  signed-out visitors can read only Markets and Runs; all seven Categories are accepted; an Alert fires exactly once
+  and only on a real change, can't exist on an unfollowed Market, is capped at 3 per Market and 50 per user, is
+  deleted on Unfollow, and is private (another user's limit is never revealed); `visits` is private and its upsert
+  works without app code setting `user_id`; neither `alerts` nor `visits` is on Realtime.
+- v1 was checked in a real browser with two Clerk test users: sign-in-then-follow, each user sees only their own Watchlist,
   "Watchlist full (25)", live updates without a reload for over 3 minutes, and Stale → Live again after going offline.
 
 ## Repository
@@ -83,7 +114,8 @@ The worker runs on Supabase, not locally; the local app reads the same live data
 | Path | What |
 |---|---|
 | `app/`, `components/`, `lib/` | The Next.js app |
-| `supabase/migrations/` | The schema, only ever changed by a new migration (0001 tables + RLS, 0002 worker functions, 0003 cron secret, 0004 schedules) |
+| `supabase/migrations/` | The schema, only ever changed by a new migration (0001 tables + RLS, 0002 worker functions, 0003 cron secret, 0004 schedules, 0005 seven Categories, 0006 Alerts, 0007 visits) |
 | `supabase/functions/sync-markets/` | The worker: `index.ts` (Deno) and `logic.ts` (pure, tested) |
 | `supabase/tests/checks.sql` | The SQL checks |
-| `docs/` | Plan, data-flow chart, source notes |
+| `test/` | UI test setup and the fake live feed |
+| `docs/` | Plan, v2 redesign plan, data-flow chart, source notes |
