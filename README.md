@@ -10,7 +10,8 @@ Where Polymarket is built for betting, Odds Desk is built for **watching**:
   **Δ 1h / Δ 24h**, and a **Heatmap** view shows your whole Watchlist's movement at once.
 - **A reason to come back:** a **"Since your last visit"** Recap lists what moved (and what Finished) while you were
   away, with a **Replay** of the moves.
-- **Price alerts:** "tell me when Yes is above 60%". Each alert is a dashed line on its card and fires once, in the app.
+- **Price alerts:** "tell me when Yes is above 60%". Each alert is a dashed line on its card's bar and sparkline and
+  fires once, in the app: the moment a live Price crosses it you get a toast and an "Alert hit" badge.
 - **Always honest about freshness:** a heartbeat beats once per Run and goes flat amber when Stale, red when Down.
 - **Neutral by design:** green/red only for direction on Yes/No Markets; team-vs-team Markets stay neutral.
 
@@ -98,7 +99,8 @@ The worker runs on Supabase, not locally; the local app reads the same live data
   - **ui** (jsdom + React Testing Library): the live Watchlist rendered whole, with Supabase and Realtime replaced by a
     fake feed (`test/fake-feed.tsx`) that pushes Price updates and Runs and drops or restores the connection. It
     checks what a user sees: the split, rolling Chances, direction colours, Fresh / Stale / Down and the heartbeat,
-    refetch on reconnect, sparklines and Δ, Alerts, the Recap and Replay, the Heatmap, and reduced motion. Also Browse
+    refetch on reconnect, sparklines and Δ, Alerts and the live alert toast, the Recap and Replay, the Heatmap, and
+    reduced motion. Also Browse
     cards and Category tabs, and the theme toggle.
 - `supabase/tests/checks.sql`, run through the Supabase MCP in a rolled-back transaction: the same Prices sent twice
   change 0 rows the second time; user B can't see, delete or update user A's Follow; the 26th Follow is rejected;
