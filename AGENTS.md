@@ -179,3 +179,17 @@ Cut in this order, never the core (worker, Realtime, Freshness states, RLS on Fo
 1. Sparkline + Δ 1h
 2. `/status` page (fold the run log into a collapsible panel)
 3. Sports and Crypto (Politics only)
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs are GitHub Issues on `chentejung/mpcs_design_build_ship_5`, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` at the root, ADRs in `docs/adr/` (created when the first decision is recorded). See `docs/agents/domain.md`.
