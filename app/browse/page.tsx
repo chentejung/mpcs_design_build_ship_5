@@ -73,7 +73,7 @@ async function BrowseCategory({ searchParams }: Props) {
       ) : (
         <div className="mt-6 space-y-4">
           {groups.map((g) => (
-            <section key={g.key} aria-label={g.title} className="overflow-hidden rounded-lg border border-line bg-panel">
+            <section key={g.key} aria-label={g.title} className="overflow-hidden rounded-xl border border-line bg-panel shadow-card">
               {g.showHeading ? (
                 <h2 className="border-b border-line bg-raised/50 px-4 py-2 text-sm font-semibold text-dim">{g.title}</h2>
               ) : null}
@@ -113,7 +113,7 @@ function CategoryTabs({ current }: { current: CategorySlug }) {
           href={`/browse?category=${c.slug}`}
           aria-current={c.slug === current ? "page" : undefined}
           className={`-mb-px border-b-2 px-3 py-2 text-sm ${
-            c.slug === current ? "border-side-a text-ink" : "border-transparent text-dim hover:text-ink"
+            c.slug === current ? "border-accent font-medium text-ink" : "border-transparent text-dim hover:text-ink"
           }`}
         >
           {c.label}

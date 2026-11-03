@@ -32,7 +32,7 @@ export function FollowButton({
     const back = `${returnTo}${returnTo.includes("?") ? "&" : "?"}follow=${encodeURIComponent(marketId)}`;
     return (
       <SignInButton mode="modal" forceRedirectUrl={back} signUpForceRedirectUrl={back}>
-        <button type="button" className={`${base} border-line text-dim hover:border-side-a hover:text-ink`} aria-label={`Follow ${label}`}>
+        <button type="button" className={`${base} border-accent text-accent hover:bg-accent hover:text-on-accent`} aria-label={`Follow ${label}`}>
           Follow
         </button>
       </SignInButton>
@@ -56,7 +56,7 @@ export function FollowButton({
         disabled={pending}
         aria-pressed={shown}
         aria-label={`${shown ? "Unfollow" : "Follow"} ${label}`}
-        className={`${base} ${shown ? "border-side-a bg-side-a text-desk" : "border-line text-dim hover:border-side-a hover:text-ink"} disabled:opacity-60`}
+        className={`${base} ${shown ? "border-accent-soft bg-accent-soft text-accent" : "border-accent text-accent hover:bg-accent hover:text-on-accent"} disabled:opacity-60`}
       >
         {shown ? "Following" : "Follow"}
       </button>

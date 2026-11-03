@@ -19,7 +19,7 @@ export function SiteNavLinks({ path }: { path: string | null }) {
             key={href}
             href={href}
             aria-current={current ? "page" : undefined}
-            className={`rounded-md px-3 py-1.5 ${current ? "bg-raised text-ink" : "text-dim hover:text-ink"}`}
+            className={`rounded-md px-3 py-1.5 ${current ? "bg-accent-soft font-medium text-accent" : "text-dim hover:bg-raised hover:text-ink"}`}
           >
             {label}
           </Link>

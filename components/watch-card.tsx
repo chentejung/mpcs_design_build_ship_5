@@ -27,7 +27,7 @@ export function WatchCard({ market, now, muted }: { market: Followed; now: Date;
     });
 
   return (
-    <li className="overflow-hidden rounded-lg border border-line bg-panel">
+    <li className="overflow-hidden rounded-xl border border-line bg-panel shadow-card">
       {/* The key replays the flash on every move. */}
       <div key={move?.seq ?? 0} className={`px-4 py-3 ${market.closed ? "" : flash}`}>
         <div className="flex items-start justify-between gap-3">

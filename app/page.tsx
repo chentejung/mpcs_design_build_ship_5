@@ -52,7 +52,7 @@ function Landing() {
         Watchlist updates on its own every few seconds, with a clear sign when the data is fresh, stale or down.
       </p>
       <div className="mt-8 flex gap-3">
-        <Link href="/browse" className="rounded-md bg-side-a px-4 py-2 text-sm font-semibold text-desk hover:bg-ink">
+        <Link href="/browse" className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-on-accent hover:bg-accent-strong">
           Browse Markets
         </Link>
         <Link href="/status" className="rounded-md border border-line px-4 py-2 text-sm text-dim hover:text-ink">

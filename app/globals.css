@@ -1,29 +1,62 @@
 @import "tailwindcss";
 
-/* Odds Desk: a neutral dark desk. Colour carries meaning only where AGENTS.md allows it:
-   green/red for direction on Yes/No Markets, amber for Stale, red for Down. */
+/* Odds Desk v2: light by default, dark on request (a `dark` class on <html>, set before paint).
+   Colour carries meaning only where AGENTS.md allows it: green/red for direction on Yes/No Markets,
+   amber for Stale, red for Down. The brand accent is indigo, never green or red. */
 @theme {
-  --color-desk: #0e1116;
-  --color-panel: #151a21;
-  --color-raised: #1c222b;
-  --color-line: #2a313c;
-  --color-ink: #e7ebf0;
-  --color-dim: #9aa4b2;
-  --color-faint: #6b7584;
-  --color-side-a: #c9d3df;
-  --color-side-b: #465061;
+  --color-desk: #f5f6fa;
+  --color-panel: #ffffff;
+  --color-raised: #eef0f6;
+  --color-line: #e1e4ec;
+  --color-ink: #12161f;
+  --color-dim: #4a5466;
+  --color-faint: #6c7686;
+  --color-side-a: #3d4658;
+  --color-side-b: #d5dae4;
+  --color-accent: #4f46e5;
+  --color-accent-strong: #4338ca;
+  --color-accent-soft: #eef0ff;
+  --color-on-accent: #ffffff;
+  --color-up: #0f8a5f;
+  --color-down: #d43a3f;
+  --color-stale: #b45309;
+  --color-live: #0f8a5f;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.05), 0 1px 3px rgb(16 24 40 / 0.06);
+}
+
+/* A softer navy than v1's near-black, with lifted panels so cards read as cards. */
+.dark {
+  --color-desk: #0f1421;
+  --color-panel: #161c2b;
+  --color-raised: #1f2738;
+  --color-line: #2b3448;
+  --color-ink: #e9edf4;
+  --color-dim: #a3adbd;
+  --color-faint: #7a8597;
+  --color-side-a: #c9d3e0;
+  --color-side-b: #3a4458;
+  --color-accent: #818cf8;
+  --color-accent-strong: #a5b4fc;
+  --color-accent-soft: #232a4a;
+  --color-on-accent: #0f1421;
   --color-up: #3ecf8e;
   --color-down: #f2555a;
   --color-stale: #f0b429;
   --color-live: #3ecf8e;
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3);
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
   background: var(--color-desk);
+}
+html.dark {
+  color-scheme: dark;
 }
 
 body {
@@ -37,7 +70,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-side-a);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
