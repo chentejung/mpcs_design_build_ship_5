@@ -125,3 +125,13 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .toast-in { animation: none; }
 }
+
+/* The landing's trending banner: each topic slides in gently. Not under reduced motion. */
+@keyframes slide-in {
+  from { transform: translateX(1.5rem); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.slide-in { animation: slide-in 0.4s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .slide-in { animation: none; }
+}
