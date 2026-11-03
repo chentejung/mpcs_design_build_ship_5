@@ -4,10 +4,11 @@
 // (re)subscribe refetches the snapshot. The Clerk session token makes RLS apply to the subscription.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { clearFinished } from "@/app/actions/follows";
 import { FreshnessView, isMuted } from "@/components/freshness";
 import { useNow } from "@/components/use-now";
+import { useRealtimeChannel } from "@/components/use-realtime";
 import { WatchCard } from "@/components/watch-card";
 import { freshness } from "@/lib/freshness";
 import { MARKET_COLUMNS, type Market } from "@/lib/markets";
@@ -23,8 +24,6 @@ import {
   type Followed,
 } from "@/lib/watchlist";
 
-type Connection = "connecting" | "live" | "lost";
-
 export function WatchlistLive({
   initialItems,
   initialRuns,
@@ -39,58 +38,43 @@ export function WatchlistLive({
   const now = useNow(renderedAt);
   const [items, setItems] = useState(initialItems);
   const [runs, setRuns] = useState(initialRuns);
-  const [connection, setConnection] = useState<Connection>("connecting");
   const [clearing, startClearing] = useTransition();
   const [ids] = useState(() => initialItems.map((m) => m.id));
 
-  useEffect(() => {
+  // Realtime doesn't replay what was missed: on every (re)subscribe, reload what's on screen.
+  const refetch = async () => {
     if (!db) return;
-    let cancelled = false;
-
-    // Realtime doesn't replay what was missed: on every (re)subscribe, reload what's on screen.
-    const refetch = async () => {
-      const [follows, latest] = await Promise.all([
-        db.from("follows").select(`created_at, markets!inner(${MARKET_COLUMNS})`).order("created_at"),
-        db.from("worker_runs").select(RUN_COLUMNS).order("started_at", { ascending: false }).limit(RUN_LOG_SIZE),
-      ]);
-      if (cancelled) return;
-      if (follows.data) {
-        const fresh = new Map(toFollowed(follows.data as unknown as FollowRow[]).map((m) => [m.id, m]));
-        // Keep each card's last move, so the arrow doesn't vanish on reconnect.
-        setItems((current) => current.flatMap((m) => {
-          const f = fresh.get(m.id);
-          return f ? [{ ...f, move: m.move }] : [];
-        }));
-      }
-      if (latest.data) setRuns((current) => mergeRuns(current, latest.data));
-    };
-
-    let channel = db.channel("watchlist");
-    const filter = marketsFilter(ids);
-    if (filter) {
-      channel = channel.on("postgres_changes", { event: "UPDATE", schema: "public", table: "markets", filter }, (payload) => {
-        setItems((current) => applyMarketUpdate(current, payload.new as Partial<Market> & { id: string }));
-      });
+    const [follows, latest] = await Promise.all([
+      db.from("follows").select(`created_at, markets!inner(${MARKET_COLUMNS})`).order("created_at"),
+      db.from("worker_runs").select(RUN_COLUMNS).order("started_at", { ascending: false }).limit(RUN_LOG_SIZE),
+    ]);
+    if (follows.data) {
+      const fresh = new Map(toFollowed(follows.data as unknown as FollowRow[]).map((m) => [m.id, m]));
+      // Keep each card's last move, so the arrow doesn't vanish on reconnect.
+      setItems((current) => current.flatMap((m) => {
+        const f = fresh.get(m.id);
+        return f ? [{ ...f, move: m.move }] : [];
+      }));
     }
-    channel
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "worker_runs" }, (payload) => {
-        setRuns((current) => mergeRuns(current, [payload.new as Run]));
-      })
-      .subscribe((status) => {
-        if (cancelled) return;
-        if (status === "SUBSCRIBED") {
-          setConnection("live");
-          void refetch();
-        } else {
-          setConnection("lost");
-        }
-      });
+    if (latest.data) setRuns((current) => mergeRuns(current, latest.data));
+  };
 
-    return () => {
-      cancelled = true;
-      void db.removeChannel(channel);
-    };
-  }, [db, ids]);
+  const filter = marketsFilter(ids);
+  const connection = useRealtimeChannel(
+    db,
+    `watchlist:${ids.join(",")}`,
+    (channel) => {
+      const withMarkets = filter
+        ? channel.on("postgres_changes", { event: "UPDATE", schema: "public", table: "markets", filter }, (payload) => {
+            setItems((current) => applyMarketUpdate(current, payload.new as Partial<Market> & { id: string }));
+          })
+        : channel;
+      return withMarkets.on("postgres_changes", { event: "INSERT", schema: "public", table: "worker_runs" }, (payload) => {
+        setRuns((current) => mergeRuns(current, [payload.new as Run]));
+      });
+    },
+    () => void refetch(),
+  );
 
   const f = freshness(runs, now, connection !== "lost");
   const muted = isMuted(f);

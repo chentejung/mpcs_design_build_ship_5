@@ -9,9 +9,16 @@ import type { Database } from "./database.types";
 
 declare global {
   interface Window {
-    Clerk?: { session?: { getToken(): Promise<string | null> } | null };
+    Clerk?: { session?: { getToken(options?: { skipCache?: boolean }): Promise<string | null> } | null };
   }
 }
+
+/**
+ * Realtime re-reads the token only on its 25 s heartbeat, and a cached Clerk token (≈60 s life) can already be
+ * near expiry then; the server closes the channel when it expires ("Token has expired"). So, while signed in,
+ * hand Realtime a freshly minted token every 30 s.
+ */
+const TOKEN_REFRESH_MS = 30_000;
 
 // One client per tab, so Realtime shares one socket. The token is read from the current Clerk session at each
 // call, and Clerk refreshes it before it expires (session tokens last about a minute).
@@ -35,7 +42,14 @@ export function useSupabaseBrowser(): SupabaseClient<Database> | null {
   const db = isLoaded ? browserClient() : null;
   const sessionId = session?.id ?? null;
   useEffect(() => {
-    if (db) void db.realtime.setAuth();
+    if (!db) return;
+    void db.realtime.setAuth();
+    if (!sessionId) return;
+    const id = setInterval(async () => {
+      const token = await window.Clerk?.session?.getToken({ skipCache: true }).catch(() => null);
+      if (token) void db.realtime.setAuth(token);
+    }, TOKEN_REFRESH_MS);
+    return () => clearInterval(id);
   }, [db, sessionId]);
   return db;
 }
