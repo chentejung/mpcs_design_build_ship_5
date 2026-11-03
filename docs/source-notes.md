@@ -63,4 +63,4 @@ All 90 have an order book and well-formed JSON-string fields. The malformed-fiel
 real responses by corrupting one field.
 
 **Open question:** after the 1-hour filter only about 7 Sports Markets are left tonight, because Monday-night games have
-`endDate` = kickoff. Options: fetch a larger Sports list (e.g. `limit=100`), or accept a short Sports list.
+`endDate` = kickoff. **Decided:** Sports is fetched with `limit=100` (Politics and Crypto stay at 30).

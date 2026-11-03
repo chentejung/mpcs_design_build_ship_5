@@ -56,6 +56,7 @@ The schema is defined **only** by migrations in `supabase/migrations/`. Tables:
 | `price_history` | `market_id`, `price`, `recorded_at` — one row per actual change; pruned after 7 days | the worker only |
 | `follows` | `user_id text default (auth.jwt()->>'sub')`, `market_id`, `created_at`; primary key `(user_id, market_id)` | the signed-in user |
 | `worker_runs` | One row per Run: `started_at`, `finished_at`, `ok`, `skipped`, `rows_changed`, `catalog_refreshed`, `warnings text[]`, `error`, `duration_ms`; pruned after 2 days | the worker only |
+| `run_lock` | A single-row lease (`holder uuid`, `locked_until`) so overlapping Runs skip. A session advisory lock can't be used: the worker reaches Postgres through a connection pool | the worker only, via `try_run_lock()` / `release_run_lock(uuid)` |
 
 ### Row-level security
 
@@ -64,6 +65,7 @@ RLS is enabled on **every** table, and grants match the policies exactly:
 - `markets`, `worker_runs`: select to `anon` and `authenticated` (`using (true)`).
 - `price_history`: select to `authenticated`.
 - `follows`: select, insert, delete to `authenticated` only, where `user_id = (auth.jwt() ->> 'sub')`. No update.
+- `run_lock`: RLS on, no policies and no grants to `anon`/`authenticated`; not published to Realtime.
 - No write policies anywhere else. The worker writes with the Supabase **secret key**, which bypasses RLS; it exists
   **only** inside the Edge Function's environment, never in this repo, `.env*` files or Vercel.
 
@@ -82,10 +84,13 @@ every (re)subscribe it **refetches its snapshot**, because Realtime doesn't repl
 - **Schedule:** Supabase Cron (`pg_cron` + `pg_net`) every **10 seconds**, sending an `x-cron-secret` header read from
   Vault. The function is deployed with `verify_jwt: false` and rejects calls without the secret.
 - **Each Run:**
-  1. Take the run lock; if a previous Run holds it, record a **skipped** Run and exit.
-  2. Every ~5 minutes, refresh the Catalog from gamma: `/markets?tag_id=…&active=true&closed=false&order=volume24hr&ascending=false&limit=30`
-     for Politics (2), Sports (1), Crypto (21), plus `/markets?id=…` for followed Markets outside it (to notice
-     Finished ones). Never call `/events` (tens of MB). → `upsert_catalog(jsonb)`.
+  1. Take the run lock (`try_run_lock()`, a 30 s lease that expires on its own if a Run crashes); if a previous Run
+     holds it, record a **skipped** Run and exit. Release it with `release_run_lock(holder)` in `finally`.
+  2. Every ~5 minutes, refresh the Catalog from gamma: `/markets?tag_id=…&active=true&closed=false&order=volume24hr&ascending=false&limit=…`
+     for Politics (2, limit 30), Sports (1, **limit 100**, because most top Sports Markets end within the hour and are
+     hidden), Crypto (21, limit 30), plus `/markets?id=…` for followed Markets outside it (to notice
+     Finished ones). Never call `/events` (tens of MB). → `upsert_catalog(jsonb)` with
+     `{categories, markets}`: only the Categories fetched successfully lose Markets that dropped out of their list.
   3. Every Run, `POST https://clob.polymarket.com/midpoints` for the first-Outcome tokens of Catalog ∪ followed,
      not Finished, in chunks of 100. → `apply_prices(jsonb)`.
   4. Insert the `worker_runs` row in `finally`. Catalog errors go to `warnings`; only a failed price step makes the Run
