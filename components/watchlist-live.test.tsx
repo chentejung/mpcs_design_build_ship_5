@@ -166,3 +166,54 @@ describe("Finished Markets", () => {
     expect(within(section).queryByText("Live one?")).not.toBeInTheDocument();
   });
 });
+
+describe("cards v2", () => {
+  const IMAGE = "https://polymarket-upload.s3.us-east-2.amazonaws.com/BTC+fullsize.png";
+  const chances = () => screen.getByRole("img", { name: /chance/ }).closest("[data-split]")!;
+  const rolling = () => chances().querySelectorAll("[data-rolling]");
+
+  it("shows the Market's image", () => {
+    show([market({ id: "1", image: IMAGE })]);
+    const thumb = screen.getByTestId("thumb-1");
+    expect(thumb).toHaveAttribute("data-thumb", "image");
+    expect(thumb.querySelector("img")!.getAttribute("src")).toContain(encodeURIComponent(IMAGE));
+  });
+
+  it("shows a placeholder for the Category when a Market has no image", () => {
+    show([market({ id: "1", image: null, category: "finance" })]);
+    expect(screen.getByTestId("thumb-1")).toHaveAttribute("data-thumb", "placeholder-finance");
+  });
+
+  it("rolls both Chances to their new values on a move of at least 0.1 point", () => {
+    const feed = show([market({ id: "1", price: 0.62 })]);
+    expect(rolling()).toHaveLength(0);
+    feed.pushMarket({ id: "1", price: 0.65 });
+    expect([...rolling()].map((el) => el.getAttribute("data-rolling"))).toEqual(["up", "down"]);
+  });
+
+  it("doesn't roll on a change too small to change the displayed Chance", () => {
+    const feed = show([market({ id: "1", price: 0.62 })]);
+    feed.pushMarket({ id: "1", price: 0.6203 });
+    expect(rolling()).toHaveLength(0);
+  });
+
+  it("changes values without any animation when the viewer prefers reduced motion", () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    try {
+      const feed = show([market({ id: "1", price: 0.62 })]);
+      feed.pushMarket({ id: "1", price: 0.65 });
+      expect(screen.getByRole("img", { name: "Yes 65% chance, No 35% chance" })).toBeInTheDocument();
+      expect(rolling()).toHaveLength(0);
+      expect(chances()).toHaveAttribute("data-motion", "off");
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+});
+

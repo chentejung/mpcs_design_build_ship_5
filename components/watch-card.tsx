@@ -1,9 +1,10 @@
 "use client";
-// One followed Market on the Watchlist: Event › Market, the split bar, a ▲▼ when its displayed Chance moves,
+// One followed Market on the Watchlist: its image, Event › Market, the split bar (Chances roll on a move), a ▲▼,
 // Moved, and Unfollow. Green/red only on Yes/No Markets (product rule 3); a Finished card shows its frozen split.
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { unfollow } from "@/app/actions/follows";
+import { MarketThumb } from "@/components/market-thumb";
 import { SplitBar } from "@/components/split-bar";
 import { ago, isYesNo, polymarketUrl } from "@/lib/format";
 import { marketLabel } from "@/lib/markets";
@@ -16,7 +17,6 @@ export function WatchCard({ market, now, muted }: { market: Followed; now: Date;
   const label = marketLabel(market);
   const yesNo = isYesNo(market.outcomes);
   const move = market.move;
-  const flash = move ? (yesNo ? `flash-${move.dir}` : "flash-neutral") : "";
   const arrowColour = !move ? "" : yesNo ? (move.dir === "up" ? "text-up" : "text-down") : "text-dim";
 
   const remove = () =>
@@ -28,10 +28,10 @@ export function WatchCard({ market, now, muted }: { market: Followed; now: Date;
 
   return (
     <li className="overflow-hidden rounded-xl border border-line bg-panel shadow-card">
-      {/* The key replays the flash on every move. */}
-      <div key={move?.seq ?? 0} className={`px-4 py-3 ${market.closed ? "" : flash}`}>
+      <div className="px-4 py-3.5">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
+          <MarketThumb id={market.id} image={market.image} category={market.category} />
+          <div className="min-w-0 flex-1">
             {market.event_title && market.event_title !== label ? (
               <p className="truncate text-xs text-faint">{market.event_title} ›</p>
             ) : null}
@@ -50,7 +50,13 @@ export function WatchCard({ market, now, muted }: { market: Followed; now: Date;
 
         <div className="mt-3 flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            <SplitBar outcomes={market.outcomes} price={market.price} muted={muted || market.closed} />
+            <SplitBar
+              outcomes={market.outcomes}
+              price={market.price}
+              muted={muted || market.closed}
+              move={market.closed ? undefined : move}
+              size="lg"
+            />
           </div>
           {move && !market.closed ? (
             <span

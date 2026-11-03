@@ -6,7 +6,7 @@ export const FOLLOW_LIMIT = 25;
 
 export type Followed = Market & {
   followed_at: string;
-  /** The last live move of the displayed Chance (≥ 0.1 point); seq changes on every move, to replay the flash. */
+  /** The last live move of the displayed Chance (≥ 0.1 point); seq changes on every move, to replay the roll. */
   move?: { dir: "up" | "down"; seq: number };
 };
 
@@ -37,7 +37,7 @@ export function marketsFilter(ids: readonly string[]): string | null {
 
 /**
  * Applies a Realtime UPDATE to the Watchlist; Markets we don't follow are ignored. A move of the displayed
- * Chance by ≥ 0.1 point is recorded, so the card flashes (product rule 3); smaller changes don't flash.
+ * Chance by ≥ 0.1 point is recorded, so the card's Chances roll (product rule 3); smaller changes don't.
  */
 export function applyMarketUpdate(items: readonly Followed[], update: Partial<Market> & { id: string }): Followed[] {
   return items.map((m) => {

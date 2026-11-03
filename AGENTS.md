@@ -34,8 +34,9 @@ Terms are defined in [`CONTEXT.md`](CONTEXT.md): **Market**, **Event**, **Outcom
    both as a split bar ("Hawks 62 | 38 Pacers", "Yes 95.5 | 4.5 No"). Only the first Outcome's Price is stored; the
    second is shown as `1 − Price`.
 3. **Color has meaning only for Yes/No.** Green/red for direction only on Yes/No Markets; other Markets get neutral ▲▼,
-   so the app never looks like it's rooting for a team. Cards flash only when the displayed Chance (1 decimal) changes
-   by ≥ 0.1 point, and the flash respects `prefers-reduced-motion`.
+   so the app never looks like it's rooting for a team. The brand accent (indigo) is never green or red. A card's
+   Chances roll to their new values and its bar glides only when the displayed Chance (1 decimal) changes by ≥ 0.1
+   point; with `prefers-reduced-motion` values change instantly, with no animation.
 4. **At most 25 Follows per user, Finished included**, enforced by a database trigger ("Watchlist full (25)").
 5. **Watchlist:** live Markets first, in Follow order (no reordering while you read), then a collapsed
    **Finished (n)** section with **Clear finished** (deletes those Follows). Finished cards show the frozen final split.
@@ -173,6 +174,8 @@ Each card separately shows when it **Moved** (`price_changed_at`), so a quiet Ma
 ## Free-tier limits
 
 - Edge Function calls: a 10 s Cron is ~260k of the 500k/month free — don't go faster.
+- Images: Market images go through Next's optimiser at a fixed card size (1x/2x), only from Polymarket's upload
+  bucket (`next.config.ts`), so ~540 images stay well inside Vercel Hobby's monthly allowance.
 - Realtime messages: only real Price changes, only to Watchlist subscribers, each filtered to ≤ 25 Markets; Browse is
   static.
 - `price_history` and `worker_runs` are pruned hourly by a Cron job.

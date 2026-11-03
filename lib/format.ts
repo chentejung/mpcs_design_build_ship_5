@@ -1,7 +1,7 @@
 // How Prices and times are shown. The UI says Chance (a %); code and data say Price (0–1).
 // Pure, so it is unit-tested (AGENTS.md → Product rules 2–3).
 
-/** A Price as tenths of a Chance point: 0.6234 → 623 (62.3). The flash compares these. */
+/** A Price as tenths of a Chance point: 0.6234 → 623 (62.3). The roll rule compares these. */
 export function chanceTenths(price: number): number {
   return Math.round(price * 1000);
 }
@@ -32,7 +32,7 @@ export function isYesNo(outcomes: readonly string[]): boolean {
   return outcomes.length === 2 && outcomes[0] === "Yes" && outcomes[1] === "No";
 }
 
-/** The flash rule: did the displayed Chance move by at least 0.1 point, and which way? */
+/** The roll rule (product rule 3): did the displayed Chance move by at least 0.1 point, and which way? */
 export function moveDirection(previous: number | null, next: number | null): "up" | "down" | null {
   if (previous === null || next === null) return null;
   const a = chanceTenths(previous);
