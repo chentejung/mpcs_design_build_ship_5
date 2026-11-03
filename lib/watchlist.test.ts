@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { Alert } from "./alerts";
 import type { Market } from "./markets";
-import { applyMarketUpdate, marketsFilter, splitWatchlist, toFollowed, type Followed } from "./watchlist";
+import { applyMarketUpdate, crossedAlerts, marketsFilter, splitWatchlist, toFollowed, type Followed } from "./watchlist";
 
 const market = (over: Partial<Market>): Market => ({
   id: "1", question: "Q?", slug: "q", image: null, category: "politics", event_id: null, event_title: null,
@@ -104,5 +105,51 @@ describe("history on the Watchlist", () => {
     ]);
     expect(m).not.toHaveProperty("recent");
     expect(m).not.toHaveProperty("before");
+  });
+});
+
+describe("crossedAlerts", () => {
+  const alert = (over: Partial<Alert> & { id: number }): Alert => ({
+    market_id: "1", direction: "above", threshold: 0.6, created_at: "t", triggered_at: null, triggered_price: null, ...over,
+  });
+  const items = [followed("1", "t1", { price: 0.55 }), followed("2", "t2", { price: 0.3 })];
+
+  it("reports the above alerts the new Price reached or passed", () => {
+    const alerts = [alert({ id: 1, threshold: 0.6 }), alert({ id: 2, threshold: 0.65 }), alert({ id: 3, threshold: 0.7 })];
+    expect(crossedAlerts(items, alerts, { id: "1", price: 0.65 }).map((a) => a.id)).toEqual([1, 2]);
+  });
+
+  it("reports the below alerts the new Price reached or passed", () => {
+    const alerts = [
+      alert({ id: 1, market_id: "2", direction: "below", threshold: 0.25 }),
+      alert({ id: 2, market_id: "2", direction: "below", threshold: 0.2 }),
+    ];
+    expect(crossedAlerts(items, alerts, { id: "2", price: "0.2500" as unknown as number }).map((a) => a.id)).toEqual([1]);
+  });
+
+  it("reports only the updated Market's alerts", () => {
+    const alerts = [alert({ id: 1, market_id: "2", direction: "below", threshold: 0.4 })];
+    expect(crossedAlerts(items, alerts, { id: "1", price: 0.35 })).toEqual([]);
+  });
+
+  it("doesn't report an alert that has already triggered", () => {
+    const alerts = [alert({ id: 1, triggered_at: "2026-11-03T11:58:00Z", triggered_price: 0.61 })];
+    expect(crossedAlerts(items, alerts, { id: "1", price: 0.65 })).toEqual([]);
+  });
+
+  it("reports nothing for a Finished Market", () => {
+    const finished = [followed("1", "t1", { price: 0.55, closed: true })];
+    expect(crossedAlerts(finished, [alert({ id: 1 })], { id: "1", price: 0.65 })).toEqual([]);
+    expect(crossedAlerts(items, [alert({ id: 1 })], { id: "1", price: 0.65, closed: true })).toEqual([]);
+  });
+
+  it("reports nothing when the Price didn't change, even past the threshold", () => {
+    const past = [followed("1", "t1", { price: 0.65 })];
+    expect(crossedAlerts(past, [alert({ id: 1 })], { id: "1", price: 0.65, volume_24h: 5 })).toEqual([]);
+    expect(crossedAlerts(past, [alert({ id: 1 })], { id: "1", volume_24h: 5 })).toEqual([]);
+  });
+
+  it("reports nothing for a Market that isn't followed", () => {
+    expect(crossedAlerts(items, [alert({ id: 1, market_id: "9" })], { id: "9", price: 0.65 })).toEqual([]);
   });
 });

@@ -115,3 +115,13 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .spark-draw { animation: none; stroke-dashoffset: 0; }
 }
+
+/* An "Alert hit" toast slides up once as it appears. Not under reduced motion. */
+@keyframes toast-in {
+  from { transform: translateY(0.75rem); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.toast-in { animation: toast-in 0.25s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .toast-in { animation: none; }
+}

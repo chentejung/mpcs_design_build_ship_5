@@ -2,7 +2,8 @@
 // A Watchlist card's last 24 hours: a sparkline of the first Outcome's Price and its Δ 1h / Δ 24h in Chance
 // points (lib/history.ts). The stroke is neutral for every Market; direction colour stays in the card's ▲▼
 // (product rule 3). The line draws in once, not under reduced motion, and gains points live; a Finished
-// card shows its frozen history, ending when trading ended.
+// card shows its frozen history, ending when trading ended. Active Alerts are dashed horizontal lines at their
+// thresholds, in the neutral accent; the scale stretches to include them.
 import { useReducedMotion } from "@/components/use-reduced-motion";
 import { splitChances } from "@/lib/format";
 import { DAY_MS, delta, formatDelta, HOUR_MS, WINDOW_MS, type PricePoint } from "@/lib/history";
@@ -12,7 +13,18 @@ const W = 120;
 const H = 28;
 const PAD = 2;
 
-export function PriceTrend({ market, now, muted }: { market: Followed; now: Date; muted: boolean }) {
+export function PriceTrend({
+  market,
+  now,
+  muted,
+  lines = [],
+}: {
+  market: Followed;
+  now: Date;
+  muted: boolean;
+  /** Prices (0–1) to mark with a dashed line: the card's active Alerts. */
+  lines?: readonly number[];
+}) {
   if (market.price === null) return null;
   const history = market.history ?? [];
   // A Finished card is frozen: its line and Δs are as of when trading ended.
@@ -25,6 +37,7 @@ export function PriceTrend({ market, now, muted }: { market: Followed; now: Date
         history={history}
         price={market.price}
         end={end}
+        lines={lines}
       />
       <p className="num flex flex-wrap gap-x-3 text-xs text-dim">
         <span title="Change in Chance points over the last hour">Δ 1h {formatDelta(delta(history, market.price, at, HOUR_MS))}</span>
@@ -46,15 +59,17 @@ function Sparkline({
   history,
   price,
   end,
+  lines,
 }: {
   outcome: string;
   history: readonly PricePoint[];
   price: number;
   end: number;
+  lines: readonly number[];
 }) {
   const reduced = useReducedMotion();
   const start = end - WINDOW_MS;
-  const prices = [...history.map((p) => p.price), price];
+  const prices = [...history.map((p) => p.price), price, ...lines];
   let lo = Math.min(...prices);
   let hi = Math.max(...prices);
   if (hi - lo < 0.01) {
@@ -89,6 +104,19 @@ function Sparkline({
       height={H}
       className="shrink-0 overflow-visible text-side-a"
     >
+      {lines.map((t) => (
+        <line
+          key={t}
+          data-spark-alert-line={t}
+          x1={0}
+          x2={W}
+          y1={fmt(y(t))}
+          y2={fmt(y(t))}
+          strokeWidth={1}
+          strokeDasharray="3 2"
+          className="stroke-accent"
+        />
+      ))}
       <path
         d={d}
         pathLength={1}

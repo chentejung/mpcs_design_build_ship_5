@@ -1,7 +1,7 @@
 "use client";
 // One followed Market on the Watchlist: its image, Event › Market, the split bar (Chances roll on a move), a ▲▼,
 // Moved, and Unfollow. Green/red only on Yes/No Markets (product rule 3); a Finished card shows its frozen split.
-// Its Alerts: dashed lines on the bar for active ones, an "Alert hit" badge once one has triggered.
+// Its Alerts: dashed lines on the bar and the sparkline for active ones, an "Alert hit" badge once one has triggered.
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { unfollow } from "@/app/actions/follows";
@@ -99,7 +99,12 @@ export function WatchCard({
           )}
         </div>
 
-        <PriceTrend market={market} now={now} muted={muted || market.closed} />
+        <PriceTrend
+          market={market}
+          now={now}
+          muted={muted || market.closed}
+          lines={market.closed ? [] : activeAlerts.map((a) => a.threshold)}
+        />
 
         <p className="mt-2 flex flex-wrap gap-x-2 text-xs text-faint">
           {market.closed ? (

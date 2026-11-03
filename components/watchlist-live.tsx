@@ -1,11 +1,14 @@
 "use client";
 // The live Watchlist (AGENTS.md → Realtime, Product rule 5). Its feed (components/watchlist-feed.tsx) delivers
 // UPDATEs of the followed Markets only (id=in.(…), ≤ 25) and new worker_runs for Freshness. Realtime doesn't
-// replay what was missed, so every (re)subscribe refetches the snapshot.
+// replay what was missed, so every (re)subscribe refetches the snapshot. Alerts aren't on Realtime: a pushed
+// UPDATE that crosses one (the same rule as apply_prices) marks it hit locally at once and shows a toast; the next
+// refetch confirms the stored trigger, without a second toast.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { clearFinished } from "@/app/actions/follows";
+import { AlertToasts, type Toast } from "@/components/alert-toasts";
 import { FreshnessView, Heartbeat, isMuted } from "@/components/freshness";
 import { Heatmap, ViewToggle } from "@/components/heatmap";
 import { TriggeredAlerts } from "@/components/triggered-alerts";
@@ -14,10 +17,12 @@ import { useNow } from "@/components/use-now";
 import { useWatchlistView } from "@/components/use-watchlist-view";
 import { WatchCard } from "@/components/watch-card";
 import { useWatchlistFeed } from "@/components/watchlist-feed";
-import { toAlert, type Alert } from "@/lib/alerts";
+import { alertPhrase, toAlert, type Alert } from "@/lib/alerts";
+import { splitChances } from "@/lib/format";
 import { freshness } from "@/lib/freshness";
+import { marketLabel } from "@/lib/markets";
 import { mergeRuns, type Run } from "@/lib/runs";
-import { applyMarketUpdate, FOLLOW_LIMIT, splitWatchlist, toFollowed, type Followed } from "@/lib/watchlist";
+import { applyMarketUpdate, crossedAlerts, FOLLOW_LIMIT, splitWatchlist, toFollowed, type Followed } from "@/lib/watchlist";
 
 export function WatchlistLive({
   initialItems,
@@ -39,10 +44,42 @@ export function WatchlistLive({
   const [clearing, startClearing] = useTransition();
   const [ids] = useState(() => initialItems.map((m) => m.id));
   const [view, setView] = useWatchlistView();
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  // The feed may keep the first onMarket it was given, so crossings are checked against refs, not a closure.
+  const itemsRef = useRef(items);
+  const alertsRef = useRef(alerts);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+  useEffect(() => {
+    alertsRef.current = alerts;
+  }, [alerts]);
+  // Alerts marked hit here: toasted once, and kept hit until a snapshot shows the database's trigger.
+  const hitHere = useRef(new Set<number>());
+
+  const onMarket = (update: Parameters<typeof applyMarketUpdate>[1]) => {
+    const crossed = crossedAlerts(itemsRef.current, alertsRef.current, update).filter((a) => !hitHere.current.has(a.id));
+    setItems((current) => applyMarketUpdate(current, update));
+    const m = itemsRef.current.find((i) => i.id === update.id);
+    if (crossed.length === 0 || !m) return;
+    const price = Number(update.price);
+    const at = new Date().toISOString();
+    const hit = new Set(crossed.map((a) => a.id));
+    for (const id of hit) hitHere.current.add(id);
+    const marked = alertsRef.current.map((a) => (hit.has(a.id) ? { ...a, triggered_at: at, triggered_price: price } : a));
+    alertsRef.current = marked;
+    setAlerts(marked);
+    const [chance] = splitChances(price);
+    setToasts((current) => [
+      ...current,
+      ...crossed.map((a) => ({ id: a.id, text: `Alert hit: ${alertPhrase(m.outcomes, a)} on ${marketLabel(m)} — now ${chance}%` })),
+    ]);
+  };
+  const dismissToast = useCallback((id: number) => setToasts((current) => current.filter((t) => t.id !== id)), []);
 
   const { connection, loadSnapshot } = useWatchlistFeed({
     marketIds: ids,
-    onMarket: (update) => setItems((current) => applyMarketUpdate(current, update)),
+    onMarket,
     onRun: (run) => setRuns((current) => mergeRuns(current, [run])),
     // Realtime doesn't replay what was missed: on every (re)subscribe, reload what's on screen.
     onSubscribed: () => void refetch(),
@@ -59,7 +96,14 @@ export function WatchlistLive({
       }));
     }
     if (snapshot.runs) setRuns((current) => mergeRuns(current, snapshot.runs!));
-    if (snapshot.alerts) setAlerts(snapshot.alerts.map(toAlert));
+    if (snapshot.alerts) {
+      // An Alert hit here stays hit if the snapshot was read before the worker stored the trigger.
+      const local = new Map(alertsRef.current.map((a) => [a.id, a]));
+      setAlerts(snapshot.alerts.map(toAlert).map((a) => {
+        const mine = local.get(a.id);
+        return a.triggered_at === null && mine?.triggered_at && hitHere.current.has(a.id) ? mine : a;
+      }));
+    }
   };
 
   const alertAdded = (alert: Alert) => setAlerts((current) => [...current, alert]);
@@ -147,6 +191,7 @@ export function WatchlistLive({
           ) : null}
         </>
       )}
+      <AlertToasts toasts={toasts} onDismiss={dismissToast} />
     </>
   );
 }
