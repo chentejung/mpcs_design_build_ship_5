@@ -6,7 +6,7 @@ here.
 
 MPCS 51238 Design, Build, Ship, Assignment 5: Live Data System.
 
-- **Live app:** _(Vercel URL, added after the first deploy)_
+- **Live app:** https://mpcs-design-build-ship-5.vercel.app/
 - **Data flow chart:** [`docs/data-flow.md`](docs/data-flow.md), drawn before any code
 - **What the source sends and how often it changes:** [`docs/source-notes.md`](docs/source-notes.md)
 - **Decisions and rules:** [`AGENTS.md`](AGENTS.md) · **Terms:** [`CONTEXT.md`](CONTEXT.md)
