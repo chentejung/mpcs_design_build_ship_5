@@ -28,6 +28,17 @@ _Avoid_: tag, topic
 The Markets the system tracks: the top Markets by 24-hour volume in each Category, plus every followed Market.
 _Avoid_: feed, universe
 
+**Place**:
+Where in the world a Market is about: a country (ISO 3166-1 alpha-2 code, such as `IR` or `US`) or a region
+(`region:middle-east`, `region:europe`, `region:asia`, `region:africa`, `region:latin-america`,
+`region:north-america`, `region:oceania`). A Market can have several. The worker reads them from gamma's tags, or
+failing that from country names in the Market's text; a Sports Market's Place is its league's home.
+_Avoid_: location, geo, country (for a region)
+
+**Global**:
+A Market with no Place, such as most Crypto, Tech and Culture Markets.
+_Avoid_: worldwide, unplaced, none
+
 **Finished**:
 A Market whose trading has ended; its final Price is frozen. Who actually won is not tracked.
 _Avoid_: resolved, settled, expired

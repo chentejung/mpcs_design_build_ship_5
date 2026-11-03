@@ -95,6 +95,7 @@ export type Database = {
           image: string | null
           in_catalog: boolean
           outcomes: string[]
+          places: string[]
           price: number | null
           price_changed_at: string | null
           question: string
@@ -115,6 +116,7 @@ export type Database = {
           image?: string | null
           in_catalog?: boolean
           outcomes: string[]
+          places?: string[]
           price?: number | null
           price_changed_at?: string | null
           question: string
@@ -135,6 +137,7 @@ export type Database = {
           image?: string | null
           in_catalog?: boolean
           outcomes?: string[]
+          places?: string[]
           price?: number | null
           price_changed_at?: string | null
           question?: string

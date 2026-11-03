@@ -12,7 +12,7 @@ through Supabase Realtime. Nobody trades in the app. The full build plan, with v
 ## Language
 
 Terms are defined in [`CONTEXT.md`](CONTEXT.md): **Market**, **Event**, **Outcome**, **Category**, **Catalog**,
-**Finished**, **Price**, **Chance**, **Moved**, **Follow**, **Watchlist**, **Alert**, **Recap**, **Run**, and the **Freshness** states
+**Place**, **Global**, **Finished**, **Price**, **Chance**, **Moved**, **Follow**, **Watchlist**, **Alert**, **Recap**, **Run**, and the **Freshness** states
 **Fresh / Stale / Down**. Use them in code, UI and docs. The UI says **Chance** (a %); code and data say **Price**
 (0–1). Never "odds" in the UI or the code — "Odds Desk" is only the name.
 
@@ -57,7 +57,7 @@ The schema is defined **only** by migrations in `supabase/migrations/`. Tables:
 
 | Table | Holds | Written by |
 |---|---|---|
-| `markets` | One row per Market: question, slug, image, category, Event fields (`event_id`, `event_title`, `group_item_title`), `outcomes text[2]`, `token_id` (first Outcome), `price numeric(6,4)` 0–1, `price_changed_at`, `volume_24h`, `end_date`, `closed`, `closed_at`, `in_catalog`, `catalog_seen_at` | the worker only |
+| `markets` | One row per Market: question, slug, image, category, Event fields (`event_id`, `event_title`, `group_item_title`), `outcomes text[2]`, `token_id` (first Outcome), `price numeric(6,4)` 0–1, `price_changed_at`, `volume_24h`, `end_date`, `closed`, `closed_at`, `in_catalog`, `catalog_seen_at`, `places text[]` (the Market's **Places**: ISO 3166-1 alpha-2 codes and `region:…` codes, sorted; `'{}'` = **Global**; 0008) | the worker only |
 | `price_history` | `market_id`, `price`, `recorded_at` — one row per actual change; pruned after 7 days | the worker only |
 | `follows` | `user_id text default (auth.jwt()->>'sub')`, `market_id`, `created_at`; primary key `(user_id, market_id)` | the signed-in user |
 | `alerts` | One row per Alert: `user_id text default (auth.jwt()->>'sub')`, `market_id`, `direction` (`above`/`below`), `threshold numeric(6,4)` strictly between 0 and 1, `created_at`, `triggered_at`, `triggered_price`. Foreign key `(user_id, market_id)` → `follows` `on delete cascade`, so an Alert exists only on a Followed Market and Unfollow / Clear finished delete it. A trigger allows at most 3 per Market and 50 per user ("Alert limit reached (3 per Market)" / "(50)") | the signed-in user (create, delete); the worker sets `triggered_at`/`triggered_price` in `apply_prices` |
@@ -110,7 +110,11 @@ isn't refetched and `visits` is **not** published.
      holds it, record a **skipped** Run and exit. Release it with `release_run_lock(holder)` in `finally`.
   2. Every ~5 minutes, refresh the Catalog from gamma: `/markets?tag_id=…&active=true&closed=false&order=volume24hr&ascending=false&limit=…`
      for Politics (2, limit 30), Sports (1, **limit 100**, because one night's games fill the top of the list), Crypto (21, limit 30), Finance (120, limit 30), Tech (1401, limit 30), World (gamma's Geopolitics, 100265, limit 30), Culture (gamma's pop-culture, 596, limit 30), in that order; a Market in two lists keeps the first (so Politics wins over World). Plus `/markets?closed=true&id=…` for followed Markets outside it
-     (to notice Finished ones; without `closed=true` gamma silently leaves Finished Markets out). Never call `/events` (tens of MB). → `upsert_catalog(jsonb)` with
+     (to notice Finished ones; without `closed=true` gamma silently leaves Finished Markets out). Both URLs add
+     `include_tag=true`, and `logic.ts` turns each Market's tags into its **Places** through a lookup table (countries,
+     regions, multi-country tags like "Israel x Iran", US politics tags → `US`, Sports leagues pinned to their home:
+     NHL → `US`+`CA`, UCL → `region:europe`, …); only if no tag gives a Place does it match country names as whole
+     words in the question, Event title and group item title (ambiguous names such as Georgia are skipped). Never call `/events` (tens of MB). → `upsert_catalog(jsonb)` with
      `{categories, markets}`: only the Categories fetched successfully lose Markets that dropped out of their list.
   3. Every Run, `POST https://clob.polymarket.com/midpoints` for the first-Outcome tokens of Catalog ∪ followed,
      not Finished, in chunks of 100. → `apply_prices(jsonb)`.
@@ -181,7 +185,10 @@ Each card separately shows when it **Moved** (`price_changed_at`), so a quiet Ma
 - **vitest** (`npm run test:unit`), two projects:
   - **logic** (Node): `supabase/functions/sync-markets/logic.test.ts` against saved real responses in
     `supabase/functions/sync-markets/fixtures/` (Yes/No, team-name and Over/Under Markets, grouped Markets, ending-soon
-    dropped, malformed fields skipped, bad midpoints rejected), `lib/freshness.test.ts` and the other `lib/` helpers.
+    dropped, malformed fields skipped, bad midpoints rejected) and, in `fixtures/tags/` (fetched with `include_tag=true`),
+    the seven Category lists and a Finished lookup for **Places** (World and Politics placed, a Sports league's home,
+    Crypto Global, multi-country tags, the text fallback, malformed tags ignored), `lib/freshness.test.ts` and the
+    other `lib/` helpers.
   - **ui** (jsdom, React Testing Library): `components/**/*.test.tsx`. The live Watchlist is rendered whole, with its
     feed seam (`components/watchlist-feed.tsx`: snapshot + Realtime) replaced by the fake in `test/fake-feed.tsx`;
     `next/navigation` and the Server Actions are mocked in `test/setup-ui.ts`. Assert what a user sees or hears
@@ -192,7 +199,8 @@ Each card separately shows when it **Moved** (`price_changed_at`), so a quiet Ma
   rows and triggers nothing, an uncrossed Alert stays untriggered, an Alert on an unfollowed Market and the 4th on one
   Market (and the 51st per user) are rejected, Unfollow deletes that Market's Alerts, user B can't see or delete A's
   Alerts, and `alerts` isn't published to Realtime; Visits (0007): user B can't see or update A's `visits` row,
-  `anon` can't read `visits`, and it isn't in `supabase_realtime`. All in `supabase/tests/checks.sql`.
+  `anon` can't read `visits`, and it isn't in `supabase_realtime`; Places (0008): the same Catalog with the same
+  places changes 0 rows, changed places change 1 row. All in `supabase/tests/checks.sql`.
 - No Playwright in this iteration.
 
 ## Repo, env and deploy

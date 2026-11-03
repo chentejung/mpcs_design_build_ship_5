@@ -1,7 +1,7 @@
--- SQL checks for migrations 0001–0006. Everything runs in one transaction that is
+-- SQL checks for migrations 0001–0008. Everything runs in one transaction that is
 -- rolled back, so it leaves no data behind. Run it through the Supabase MCP
 -- execute_sql (or psql). Each check raises an error on failure and a
--- "PASS …" notice on success. Uses Market ids m1…m31, which never collide with
+-- "PASS …" notice on success. Uses Market ids m1…m31 (and c…, p1), which never collide with
 -- real gamma ids (those are numeric).
 begin;
 
@@ -343,5 +343,31 @@ do $$ begin
     'visits is in supabase_realtime';
   raise notice 'PASS visits: RLS on, not in supabase_realtime';
 end $$;
+
+-- 19. (0008) Places are saved and are part of "save only what changed": the same Catalog with the same places
+-- changes 0 rows; changed places change 1 row. An empty categories list, so no real Market drops out.
+set local role service_role;
+do $$ declare a int; b int; c int; d int; e int;
+  market jsonb := jsonb_build_object('id','p1','question','Q','slug','sp1','category','world',
+    'outcomes','["Yes","No"]'::jsonb,'token_id','tp1','price',0.5,'volume_24h',1,
+    'end_date','2026-12-01','closed',false,'in_catalog',true);
+begin
+  a := public.upsert_catalog(jsonb_build_object('categories','[]'::jsonb,'markets',
+    jsonb_build_array(market || '{"places":["IR","US","region:middle-east"]}')));
+  assert (select places from public.markets where id = 'p1') = '{IR,US,region:middle-east}', 'places not saved';
+  b := public.upsert_catalog(jsonb_build_object('categories','[]'::jsonb,'markets',
+    jsonb_build_array(market || '{"places":["IR","US","region:middle-east"]}')));
+  c := public.upsert_catalog(jsonb_build_object('categories','[]'::jsonb,'markets',
+    jsonb_build_array(market || '{"places":["IR"]}')));
+  assert (select places from public.markets where id = 'p1') = '{IR}', 'changed places not saved';
+  -- A row without places (a worker deployed before 0008) means Global: saved once as '{}', then unchanged.
+  d := public.upsert_catalog(jsonb_build_object('categories','[]'::jsonb,'markets', jsonb_build_array(market)));
+  e := public.upsert_catalog(jsonb_build_object('categories','[]'::jsonb,'markets', jsonb_build_array(market)));
+  assert (select places from public.markets where id = 'p1') = '{}', 'missing places should be Global';
+  assert a = 1 and b = 0 and c = 1 and d = 1 and e = 0, format('places a=%s b=%s c=%s d=%s e=%s', a, b, c, d, e);
+  assert (select places from public.markets where id = 'm1') = '{}', 'places should default to Global';
+  raise notice 'PASS places: saved, same places → 0 rows, changed places → 1 row, missing → Global';
+end $$;
+reset role;
 
 rollback;
