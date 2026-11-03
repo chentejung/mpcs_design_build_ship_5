@@ -9,7 +9,7 @@ export const CLOB = "https://clob.polymarket.com";
 /** The Catalog: top Markets by 24-hour volume per Category (gamma tag ids). */
 export const CATALOG_LISTS: readonly { category: Category; tagId: number; limit: number }[] = [
   { category: "politics", tagId: 2, limit: 30 },
-  // Most top Sports Markets end within the hour (kickoff) and are hidden, so fetch more.
+  // One night's games fill the top of the Sports list, so fetch more for a useful Browse.
   { category: "sports", tagId: 1, limit: 100 },
   { category: "crypto", tagId: 21, limit: 30 },
 ];
@@ -111,7 +111,8 @@ function toIsoDate(value: unknown): string | null {
  * One gamma Market → a CatalogRow, or the reason it's skipped. Anything malformed
  * is skipped whole, never half-written.
  * For a Catalog list (inCatalog), the Market must have an order book and must not
- * end within the hour. For the Finished lookup of followed Markets, neither applies.
+ * end within the next hour (past its end date but still trading is fine). For the
+ * Finished lookup of followed Markets, neither applies.
  */
 export function parseMarket(
   raw: unknown,
@@ -146,7 +147,10 @@ export function parseMarket(
 
   if (opts.inCatalog) {
     if (m.enableOrderBook !== true) return "no-order-book";
-    if (endDate && Date.parse(endDate) - opts.now.getTime() < ENDING_SOON_MS) return "ending-soon";
+    // Hide only Markets ending within the next hour. One already past its end date but still trading
+    // (a game in play, or one awaiting resolution) stays in the Catalog.
+    const untilEnd = endDate ? Date.parse(endDate) - opts.now.getTime() : null;
+    if (untilEnd !== null && untilEnd >= 0 && untilEnd < ENDING_SOON_MS) return "ending-soon";
   }
 
   const event = Array.isArray(m.events) && typeof m.events[0] === "object" && m.events[0] !== null

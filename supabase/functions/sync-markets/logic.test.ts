@@ -38,17 +38,20 @@ const row = (category: Category, id: string) => {
 };
 
 describe("parseCatalog on real gamma lists", () => {
-  it("keeps every two-Outcome Market with an order book, minus those ending within the hour", () => {
-    const politics = parseCatalog(gamma.politics, "politics", NOW);
-    const sports = parseCatalog(gamma.sports, "sports", NOW);
-    const crypto = parseCatalog(gamma.crypto, "crypto", NOW);
+  it("keeps every two-Outcome Market with an order book, including games in play", () => {
+    // At NOW, 23 Sports games had kicked off (endDate = kickoff) and were still trading.
+    expect(parseCatalog(gamma.politics, "politics", NOW)).toMatchObject({ skipped: {} });
+    expect(parseCatalog(gamma.politics, "politics", NOW).rows).toHaveLength(30);
+    expect(parseCatalog(gamma.sports, "sports", NOW).rows).toHaveLength(30);
+    expect(parseCatalog(gamma.crypto, "crypto", NOW).rows).toHaveLength(30);
+  });
 
-    expect(politics.rows).toHaveLength(28);
-    expect(politics.skipped).toEqual({ "ending-soon": 2 });
-    expect(sports.rows).toHaveLength(7);
-    expect(sports.skipped).toEqual({ "ending-soon": 23 });
-    expect(crypto.rows).toHaveLength(29);
-    expect(crypto.skipped).toEqual({ "ending-soon": 1 });
+  it("drops Markets ending within the next hour", () => {
+    // 45 min before the Bears vs. Seahawks kickoff (01:15Z), its game Markets end within the hour.
+    const before = new Date("2026-11-03T00:30:00Z");
+    const sports = parseCatalog(gamma.sports, "sports", before);
+    expect(sports.rows.map((r) => r.id)).not.toContain("5647429");
+    expect(sports.skipped["ending-soon"]).toBeGreaterThan(0);
   });
 
   it("reads a grouped Yes/No Market with its Event", () => {
@@ -81,9 +84,7 @@ describe("parseCatalog on real gamma lists", () => {
 
   it("keeps Up/Down and Over/Under Markets", () => {
     expect(row("crypto", "6537245").outcomes).toEqual(["Up", "Down"]);
-    // The Over/Under game had kicked off by NOW, so read it as of that morning.
-    const morning = new Date("2026-11-02T12:00:00Z");
-    const ou = parseCatalog(gamma.sports, "sports", morning).rows.find((r) => r.id === "5658520");
+    const ou = parseCatalog(gamma.sports, "sports", NOW).rows.find((r) => r.id === "5658520");
     expect(ou?.outcomes).toEqual(["Over", "Under"]);
     expect(ou?.group_item_title).toBe("O/U 46.5");
   });
@@ -93,9 +94,13 @@ describe("parseCatalog on real gamma lists", () => {
     expect(row("politics", "562802").token_id).toBe(JSON.parse(m.clobTokenIds as string)[0]);
   });
 
-  it("drops a Market ending within the hour, including one already past its end date", () => {
-    expect(parseMarket(raw("sports", "5647429"), "sports", { now: NOW, inCatalog: true })).toBe("ending-soon");
-    expect(parseMarket(raw("politics", "682705"), "politics", { now: NOW, inCatalog: true })).toBe("ending-soon");
+  it("drops a Market 45 min from its end, but keeps one past its end date that's still trading", () => {
+    const before = new Date("2026-11-03T00:30:00Z");
+    expect(parseMarket(raw("sports", "5647429"), "sports", { now: before, inCatalog: true })).toBe("ending-soon");
+    const inPlay = parseMarket(raw("sports", "5647429"), "sports", { now: NOW, inCatalog: true });
+    expect(typeof inPlay === "object" && inPlay.outcomes).toEqual(["Bears", "Seahawks"]);
+    const pastEnd = parseMarket(raw("politics", "682705"), "politics", { now: NOW, inCatalog: true });
+    expect(typeof pastEnd === "object" && pastEnd.id).toBe("682705");
   });
 
   it("throws if gamma doesn't return a list", () => {

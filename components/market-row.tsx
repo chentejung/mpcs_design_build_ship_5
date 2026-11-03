@@ -19,7 +19,7 @@ export function MarketRow({
       <div className="min-w-0">
         <p className="truncate font-medium" title={market.question}>{marketLabel(market)}</p>
         <p className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-faint">
-          {market.end_date ? <span>{endsIn(new Date(market.end_date), now)}</span> : null}
+          {market.end_date ? <EndLabel text={endsIn(new Date(market.end_date), now, market.category)} /> : null}
           <span className="num">{volume(market.volume_24h)} 24h</span>
           {market.price_changed_at ? <span>Moved {ago(new Date(market.price_changed_at), now)}</span> : null}
           <a href={polymarketUrl(market.slug)} target="_blank" rel="noreferrer" className="hover:text-dim">
@@ -31,4 +31,9 @@ export function MarketRow({
       <div className="flex justify-end">{action}</div>
     </li>
   );
+}
+
+function EndLabel({ text }: { text: string }) {
+  if (text !== "In play") return <span>{text}</span>;
+  return <span className="font-semibold text-dim">● In play</span>;
 }

@@ -18,7 +18,7 @@ const ENDING_SOON_MS = 60 * 60_000;
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 // Browse (product rule 6): one Category, grouped by Event, by 24-hour volume, hiding Markets that end within
-// the hour. Static: read once per request, open to signed-out visitors (anon can read markets). Signed in, each
+// the next hour (games already in play stay, marked In play). Static: read once per request, open to signed-out visitors (anon can read markets). Signed in, each
 // Market shows Follow or Following; signed out, Follow opens sign-in and follows on return.
 export default function BrowsePage({ searchParams }: Props) {
   return (
@@ -40,7 +40,8 @@ async function BrowseCategory({ searchParams }: Props) {
   const [markets, runs, follows] = await Promise.all([
     db.from("markets").select(MARKET_COLUMNS)
       .eq("category", category).eq("in_catalog", true).eq("closed", false)
-      .or(`end_date.is.null,end_date.gt.${new Date(now.getTime() + ENDING_SOON_MS).toISOString()}`)
+      // Hide Markets ending within the next hour; ones past their end date that still trade (games in play) stay.
+      .or(`end_date.is.null,end_date.lte.${now.toISOString()},end_date.gt.${new Date(now.getTime() + ENDING_SOON_MS).toISOString()}`)
       .order("volume_24h", { ascending: false, nullsFirst: false }),
     db.from("worker_runs").select("finished_at, ok, skipped, error").order("started_at", { ascending: false }).limit(20),
     // RLS returns only this user's Follows; signed out there are none to ask for.

@@ -54,10 +54,13 @@ export function ago(date: Date, now: Date): string {
   return `${Math.floor(ms / DAY)} d ago`;
 }
 
-/** "Ends in 42 min", "Ends in 5 h", "Ends in 3 d", "Ends in 4 mo"; past reads "Trading ended". */
-export function endsIn(end: Date, now: Date): string {
+/**
+ * "Ends in 42 min", "Ends in 5 h", "Ends in 3 d", "Ends in 4 mo". Past its end date but still trading: a Sports
+ * Market is a game in play ("In play"; gamma's end date for a game is its kickoff), anything else "Still trading".
+ */
+export function endsIn(end: Date, now: Date, category?: string): string {
   const ms = end.getTime() - now.getTime();
-  if (ms <= 0) return "Trading ended";
+  if (ms <= 0) return category === "sports" ? "In play" : "Still trading";
   if (ms < HOUR) return `Ends in ${Math.max(1, Math.floor(ms / MINUTE))} min`;
   if (ms < DAY) return `Ends in ${Math.floor(ms / HOUR)} h`;
   if (ms < 60 * DAY) return `Ends in ${Math.floor(ms / DAY)} d`;

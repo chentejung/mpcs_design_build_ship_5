@@ -40,7 +40,9 @@ Terms are defined in [`CONTEXT.md`](CONTEXT.md): **Market**, **Event**, **Outcom
 5. **Watchlist:** live Markets first, in Follow order (no reordering while you read), then a collapsed
    **Finished (n)** section with **Clear finished** (deletes those Follows). Finished cards show the frozen final split.
 6. **Browse** (`/browse?category=politics|sports|crypto`, default `politics`) is grouped by Event, sorted by 24-hour
-   volume, hides Markets ending within 1 hour and shows "Ends in …" on the rest. It is **static** (Prices as of page
+   volume, hides Markets ending within the next hour and shows "Ends in …" on the rest. A Market past its end
+   date that is still trading stays: on Sports that's a game in play (gamma's end date is the kickoff), marked
+   **In play**; elsewhere "Still trading". It is **static** (Prices as of page
    load, with a freshness line and Refresh) and **open to signed-out visitors**.
 7. **Sign-in then follow:** a signed-out Follow opens Clerk sign-in with a redirect to `/browse?follow=<id>`; on return
    the server follows that Market once (Assignment 4's save-after-sign-in pattern).
@@ -87,9 +89,8 @@ every (re)subscribe it **refetches its snapshot**, because Realtime doesn't repl
   1. Take the run lock (`try_run_lock()`, a 30 s lease that expires on its own if a Run crashes); if a previous Run
      holds it, record a **skipped** Run and exit. Release it with `release_run_lock(holder)` in `finally`.
   2. Every ~5 minutes, refresh the Catalog from gamma: `/markets?tag_id=…&active=true&closed=false&order=volume24hr&ascending=false&limit=…`
-     for Politics (2, limit 30), Sports (1, **limit 100**, because most top Sports Markets end within the hour and are
-     hidden), Crypto (21, limit 30), plus `/markets?id=…` for followed Markets outside it (to notice
-     Finished ones). Never call `/events` (tens of MB). → `upsert_catalog(jsonb)` with
+     for Politics (2, limit 30), Sports (1, **limit 100**, because one night's games fill the top of the list), Crypto (21, limit 30), plus `/markets?closed=true&id=…` for followed Markets outside it
+     (to notice Finished ones; without `closed=true` gamma silently leaves Finished Markets out). Never call `/events` (tens of MB). → `upsert_catalog(jsonb)` with
      `{categories, markets}`: only the Categories fetched successfully lose Markets that dropped out of their list.
   3. Every Run, `POST https://clob.polymarket.com/midpoints` for the first-Outcome tokens of Catalog ∪ followed,
      not Finished, in chunks of 100. → `apply_prices(jsonb)`.

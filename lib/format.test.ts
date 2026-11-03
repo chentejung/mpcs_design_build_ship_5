@@ -67,7 +67,9 @@ describe("times", () => {
     expect(endsIn(plus(5 * 3_600_000 + 1), now)).toBe("Ends in 5 h");
     expect(endsIn(plus(3 * 86_400_000), now)).toBe("Ends in 3 d");
     expect(endsIn(plus(400 * 86_400_000), now)).toBe("Ends in 13 mo");
-    expect(endsIn(minus(1), now)).toBe("Trading ended");
+    expect(endsIn(minus(1), now)).toBe("Still trading");
+    expect(endsIn(minus(20 * 60_000), now, "sports")).toBe("In play");
+    expect(endsIn(minus(1), now, "politics")).toBe("Still trading");
   });
 });
 
