@@ -1,17 +1,38 @@
-// The signed-out landing page: what Odds Desk is, a link to Browse, and a few of the busiest Markets right now
-// with their split, read as anon (markets is readable by anon through RLS).
+// The signed-out landing page: the top-5 trending banner first, then what Odds Desk is, a link to Browse, and a
+// few of the busiest Markets right now with their split. The Catalog is read once per request as anon (markets is
+// readable by anon through RLS) and feeds both the banner and the top Markets.
 import Link from "next/link";
 import { connection } from "next/server";
-import { Suspense } from "react";
+import { cache, Suspense } from "react";
 import { TopMarkets } from "@/components/top-markets";
+import { TrendingBanner } from "@/components/trending-banner";
 import { MARKET_COLUMNS, toMarket } from "@/lib/markets";
 import { supabase } from "@/lib/supabase";
+import { trendingTopics } from "@/lib/trending";
 
 const TOP_MARKETS = 6;
+
+/** The live Catalog by 24-hour volume, read once per request however many sections use it. */
+const catalog = cache(async () => {
+  await connection();
+  const { data, error } = await supabase()
+    .from("markets")
+    .select(MARKET_COLUMNS)
+    .eq("in_catalog", true)
+    .eq("closed", false)
+    .order("volume_24h", { ascending: false, nullsFirst: false });
+  if (error) throw new Error(`Couldn't load Markets: ${error.message}`);
+  return data.map(toMarket);
+});
 
 export function Landing() {
   return (
     <>
+      <div className="pt-2">
+        <Suspense fallback={<BannerSkeleton />}>
+          <TrendingNow />
+        </Suspense>
+      </div>
       <section className="max-w-2xl py-10">
         <h1 className="text-3xl font-semibold tracking-tight">Watch the crowd&rsquo;s Chance move, live.</h1>
         <p className="mt-4 text-dim">
@@ -51,17 +72,22 @@ export function Landing() {
   );
 }
 
+async function TrendingNow() {
+  return <TrendingBanner topics={trendingTopics(await catalog())} />;
+}
+
 async function TopMarketsNow() {
-  await connection();
-  const { data, error } = await supabase()
-    .from("markets")
-    .select(MARKET_COLUMNS)
-    .eq("in_catalog", true)
-    .eq("closed", false)
-    .order("volume_24h", { ascending: false, nullsFirst: false })
-    .limit(TOP_MARKETS);
-  if (error) throw new Error(`Couldn't load Markets: ${error.message}`);
-  return <TopMarkets markets={data.map(toMarket)} />;
+  return <TopMarkets markets={(await catalog()).slice(0, TOP_MARKETS)} />;
+}
+
+function BannerSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label="Loading trending topics"
+      className="h-64 animate-pulse rounded-2xl border border-line bg-panel motion-reduce:animate-none"
+    />
+  );
 }
 
 function TopMarketsSkeleton() {
