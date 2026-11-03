@@ -12,6 +12,7 @@ import {
   chunk,
   CLOB,
   describeList,
+  describePlaces,
   FETCH_TIMEOUT_MS,
   FINISHED_LOOKUP_CHUNK,
   finishedLookupUrl,
@@ -104,7 +105,9 @@ async function refreshCatalog(
     return { refreshed: false, changed: 0 };
   }
 
-  const { data, error } = await db.rpc("upsert_catalog", { payload: buildCatalogPayload(lists, finished) });
+  const payload = buildCatalogPayload(lists, finished);
+  parts.push(describePlaces(payload.markets));
+  const { data, error } = await db.rpc("upsert_catalog", { payload });
   if (error) {
     warnings.push(`upsert_catalog: ${error.message}`);
     console.log(`catalog: ${parts.join(" · ")} → upsert_catalog FAILED: ${error.message}`);

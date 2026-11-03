@@ -7,12 +7,16 @@ import {
   catalogUrl,
   chunk,
   describeList,
+  describePlaces,
   finishedLookupUrl,
   parseCatalog,
   parseFinished,
   parseMarket,
   parseMidpoints,
+  parseTags,
+  placesOf,
   priceTargets,
+  REGIONS,
   type CatalogRow,
   type Category,
 } from "./logic.ts";
@@ -72,6 +76,8 @@ describe("parseCatalog on real gamma lists", () => {
       end_date: "2026-11-04T04:59:00.000Z",
       closed: false,
       in_catalog: true,
+      // The 01:50Z fixtures were saved without include_tag, and the text names no country.
+      places: [],
     } satisfies CatalogRow);
   });
 
@@ -284,13 +290,135 @@ describe("schedule and URLs", () => {
 
   it("builds the gamma URLs", () => {
     expect(catalogUrl({ tagId: 1, limit: 100 })).toBe(
-      "https://gamma-api.polymarket.com/markets?tag_id=1&active=true&closed=false&order=volume24hr&ascending=false&limit=100",
+      "https://gamma-api.polymarket.com/markets?tag_id=1&active=true&closed=false&order=volume24hr&ascending=false&limit=100&include_tag=true",
     );
-    expect(finishedLookupUrl(["1", "2"])).toBe("https://gamma-api.polymarket.com/markets?closed=true&limit=2&id=1&id=2");
+    expect(finishedLookupUrl(["1", "2"])).toBe("https://gamma-api.polymarket.com/markets?closed=true&include_tag=true&limit=2&id=1&id=2");
   });
 
   it("chunks", () => {
     expect(chunk([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
     expect(chunk([], 100)).toEqual([]);
+  });
+});
+
+// Real responses with include_tag=true, saved on 2026-11-03 at 19:26:44Z (fixtures/captured-at.txt).
+const NOW_TAGS = new Date("2026-11-03T19:26:44Z");
+const tagged = (category: Category) => fixture(`tags/gamma-${category}.json`) as Record<string, unknown>[];
+const taggedRow = (category: Category, id: string) => {
+  const r = parseCatalog(tagged(category), category, NOW_TAGS).rows.find((r) => r.id === id);
+  if (!r) throw new Error(`Market ${id} was not kept`);
+  return r;
+};
+const tags = (...labels: string[]) => labels.map((label) => ({ label, slug: label.toLowerCase().replace(/ /g, "-") }));
+
+describe("places, from gamma's tags", () => {
+  it("World Markets get their countries and regions", () => {
+    // "Will the U.S. invade Iran before 2027?": U.S. x Iran, Iran, Trump, Israel, Middle East, …
+    expect(taggedRow("world", "665374").places).toEqual(["IL", "IR", "US", "region:middle-east"]);
+    // "Will Benjamin Netanyahu be the next Prime Minister of Israel?": Israel Election, Israel, Trump-Netanyahu, …
+    expect(taggedRow("world", "682705").places).toEqual(["IL", "US", "region:middle-east"]);
+  });
+
+  it("a Politics Market with US election tags is US", () => {
+    expect(taggedRow("politics", "562802").places).toEqual(["US"]);
+    // "Texas Senate", "Texas Midterm", "United States", …
+    expect(taggedRow("politics", "630964").places).toEqual(["US"]);
+  });
+
+  it("a Sports Market is placed by its league's home", () => {
+    expect(taggedRow("sports", "2772194").places).toEqual(["region:europe"]); // UCL: will Shakhtar Donetsk win it?
+    expect(taggedRow("sports", "6490417").places).toEqual(["SA"]); // Saudi Professional League
+    expect(taggedRow("sports", "5406742").places).toEqual(["CA", "US"]); // NHL: Avalanche vs. Blue Jackets
+    expect(taggedRow("sports", "6539722").places).toEqual([]); // Tennis at the Paris Masters: Paris isn't a country
+  });
+
+  it("a Crypto Market stays Global", () => {
+    expect(taggedRow("crypto", "6346616").places).toEqual([]); // Bitcoin above $78,000 on November 4?
+  });
+
+  it("a multi-country tag gives both countries", () => {
+    expect(placesOf(tags("Israel x Iran"), [])).toEqual(["IL", "IR"]);
+    expect(placesOf(tags("U.S. x Iran"), [])).toEqual(["IR", "US"]);
+  });
+
+  it("matches labels case-insensitively, falls back to the slug, and pins US states", () => {
+    expect(placesOf([{ label: "MIDDLE EAST", slug: "" }], [])).toEqual(["region:middle-east"]);
+    expect(placesOf([{ label: "Diplomacy", slug: "diplomacy" }, { label: "?", slug: "trump-iran" }], []))
+      .toEqual(["IR", "US"]);
+    expect(placesOf(tags("Texas Midterm", "Michigan Senate", "Massachusetts"), [])).toEqual(["US"]);
+    expect(placesOf(tags("Georgia Senate"), [])).toEqual(["US"]);
+    expect(placesOf(tags("Georgia"), [])).toEqual([]); // the country or the state? Neither.
+    expect(placesOf(tags("Premier League", "La Liga", "Champions League", "IPL"), []))
+      .toEqual(["ES", "GB", "IN", "region:europe"]);
+    expect(placesOf(tags("constructor", "toString"), [])).toEqual([]);
+  });
+
+  it("uses only codes from the vocabulary: ISO alpha-2 or a known region, sorted and de-duplicated", () => {
+    for (const c of CATALOG_LISTS.map((l) => l.category)) {
+      for (const r of parseCatalog(tagged(c), c, NOW_TAGS).rows) {
+        for (const p of r.places) {
+          expect(/^[A-Z]{2}$/.test(p) || (REGIONS as readonly string[]).includes(p), `${r.id} ${p}`).toBe(true);
+        }
+        expect(r.places, r.id).toEqual([...new Set(r.places)].sort());
+      }
+    }
+  });
+
+  it("places every World and Politics Market in the fixtures", () => {
+    for (const c of ["world", "politics"] as const) {
+      const unplaced = parseCatalog(tagged(c), c, NOW_TAGS).rows.filter((r) => r.places.length === 0);
+      expect(unplaced.map((r) => r.question), c).toEqual([]);
+    }
+  });
+});
+
+describe("places, falling back to the Market's text", () => {
+  it("reads country names when no tag gives a place", () => {
+    // "Will the US confirm that aliens exist before 2027?" is tagged only Politics, Aliens, Science, Culture.
+    expect(taggedRow("culture", "703257").places).toEqual(["US"]);
+    expect(placesOf(tags("Politics"), ["Will Russia and Ukraine sign a ceasefire?", null])).toEqual(["RU", "UA"]);
+    expect(placesOf([], [null, "Next Iranian Supreme Leader?", "South Korea"])).toEqual(["IR", "KR"]);
+  });
+
+  it("is conservative: whole words, proper nouns, longest name first, ambiguous names skipped", () => {
+    expect(placesOf([], ["Will South Sudan hold elections?"])).toEqual(["SS"]);
+    expect(placesOf([], ["New Mexico Governor Election Winner"])).toEqual(["US"]);
+    expect(placesOf([], ["Will the U.S. invade Iran before 2027?"])).toEqual(["IR", "US"]);
+    expect(placesOf([], ["Will Elon Musk tell us more?", "Indiana Pacers vs. Chadwick", "Omaha"])).toEqual([]);
+    expect(placesOf([], ["Will Georgia win?", "Jordan to the Lakers?", "Turkey prices at Thanksgiving"])).toEqual([]);
+  });
+
+  it("ignores the text when a tag already gives a place", () => {
+    expect(placesOf(tags("Israel"), ["Will France recognise Israel?"])).toEqual(["IL"]);
+  });
+});
+
+describe("places on malformed tags and the Finished lookup", () => {
+  it("malformed tags count as no tags, and the Market is kept", () => {
+    const base = raw("politics", "562802");
+    for (const bad of ["Iran", 42, { label: "Iran" }, [null, 5, "Iran", { label: 3, slug: ["iran"] }]]) {
+      const r = parseMarket({ ...base, tags: bad }, "politics", { now: NOW, inCatalog: true });
+      expect(typeof r === "object" && r.places, JSON.stringify(bad)).toEqual([]);
+    }
+    expect(parseTags(undefined)).toEqual([]);
+    expect(parseTags([{ label: "Iran" }, null])).toEqual([{ label: "Iran", slug: "" }]);
+  });
+
+  it("a row from the Finished lookup keeps its places", () => {
+    const finished = fixture("tags/gamma-finished-by-id.json") as { id: string }[];
+    const rows = parseFinished(finished, new Map(finished.map((m) => [m.id, "politics" as const])), NOW_TAGS).rows;
+    expect(rows).toHaveLength(2);
+    for (const r of rows) expect(r.places).toEqual(["US"]); // Trump, Trump Cabinet: the next Attorney General
+  });
+
+  it("buildCatalogPayload passes places through unchanged", () => {
+    const a = taggedRow("world", "665374");
+    expect(buildCatalogPayload([{ category: "world", rows: [a] }], []).markets[0].places).toEqual(a.places);
+  });
+
+  it("the catalog log line counts the rows with a place", () => {
+    const rows = parseCatalog(tagged("crypto"), "crypto", NOW_TAGS).rows;
+    expect(describePlaces(rows)).toBe("places 1/30"); // only the Clarity Act (a US law)
+    expect(describePlaces([])).toBe("places 0/0");
   });
 });
