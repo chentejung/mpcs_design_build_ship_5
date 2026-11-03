@@ -65,3 +65,33 @@ trade, so we compete on **watching**: live movement made visible, a personal rec
 ## Not doing
 
 Search, trading, comments, email or push alerts, the movers ticker, the dial hero, the ghost marker.
+
+---
+
+# v2.1: trending banner and a globe of Markets by place
+
+Agreed with the owner on 2026-11-03. Tickets: #13 (places), #14 (banner), #15 (globe; blocked by #13 and #14).
+
+## Decisions
+
+| Area | Decision |
+|---|---|
+| Trending banner | The top 5 **Events by summed 24-hour volume** across the Catalog (a single-Market Event is its own topic), as a slow carousel at the top of the signed-out landing. Static like Browse; no auto-rotate under reduced motion. |
+| Globe placement | The **centrepiece of the signed-out landing page**, under the banner. Browse keeps its grid. |
+| Granularity | **Countries and regions**: ISO 3166-1 alpha-2 codes (`IR`, `US`) plus `region:middle-east`, `region:europe`, `region:asia`, `region:africa`, `region:latin-america`, `region:north-america`, `region:oceania`. |
+| Placeless Markets | An empty `places` means **Global**: shown on a shelf beside the globe, not forced onto it. |
+| Sports | Leagues pinned to their home country (NHL → US/CA, Premier League → GB, Champions League → Europe). |
+| Where places come from | gamma's own tags (`include_tag=true` on the Catalog lists and the Finished lookup) through a tested lookup table in the worker, with a conservative fallback on country names in the question. No AI classification: it would need a paid API key ("no payment method"). Measured on 2026-11-03: World 29/30 and Politics 15/30 Markets carry a place tag; Crypto, Tech and Culture 0/30. |
+| Rendering | `react-globe.gl` (three.js), loaded client-only; country shapes from a static Natural Earth 110m file (public domain); no map tiles, no keys. A plain list of places is always available (screen readers, keyboard, small screens, no WebGL). Markers in the neutral accent colour (product rule 3). |
+| Schema | Migration `0008_places`: `markets.places text[] not null default '{}'`, written only by the worker through `upsert_catalog` ("save only what changed" includes places). Readable by everyone like the rest of `markets`; nothing new on Realtime. |
+
+## Notes on the source (not legal advice)
+
+- **Images** are each Market's `image` URL from gamma, hosted in Polymarket's upload bucket; Next's image optimiser on Vercel fetches and caches resized copies. They are not licensed to us explicitly, and many are third-party marks (team logos, people, crypto logos). Fine for a non-commercial class project that links back; to be stricter, serve them `unoptimized` (hotlink, no cached copy) or show only Category placeholders.
+- **API terms**: gamma and CLOB reads are public and keyless, with rate limits. There are no separate API terms; Polymarket's Terms of Use cover data used "directly or through an API" and bar commercial exploitation or resale without written agreement. Odds Desk is read-only, non-commercial, links every Market back to Polymarket, and keeps its request rate modest.
+
+## Order
+
+1. #13 places (migration approved 2026-11-03) and #14 banner, in parallel.
+2. Apply `0008`, advisors, SQL checks, regenerate types, redeploy the worker, confirm places fill in.
+3. #15 globe (it falls back to "all Global" until the column exists).
