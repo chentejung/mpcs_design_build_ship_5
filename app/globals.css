@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+/* Odds Desk: a neutral dark desk. Colour carries meaning only where AGENTS.md allows it:
+   green/red for direction on Yes/No Markets, amber for Stale, red for Down. */
+@theme {
+  --color-desk: #0e1116;
+  --color-panel: #151a21;
+  --color-raised: #1c222b;
+  --color-line: #2a313c;
+  --color-ink: #e7ebf0;
+  --color-dim: #9aa4b2;
+  --color-faint: #6b7584;
+  --color-side-a: #c9d3df;
+  --color-side-b: #465061;
+  --color-up: #3ecf8e;
+  --color-down: #f2555a;
+  --color-stale: #f0b429;
+  --color-live: #3ecf8e;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+html {
+  color-scheme: dark;
+  background: var(--color-desk);
+}
+
+body {
+  @apply bg-desk text-ink font-sans antialiased;
+}
+
+/* Every number lines up. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-side-a);
+  outline-offset: 2px;
+}
+
+/* A card flashes once when its displayed Chance moves ≥ 0.1 point (product rule 3). */
+@keyframes flash-up {
+  from { background-color: color-mix(in oklab, var(--color-up) 22%, transparent); }
+  to { background-color: transparent; }
+}
+@keyframes flash-down {
+  from { background-color: color-mix(in oklab, var(--color-down) 22%, transparent); }
+  to { background-color: transparent; }
+}
+@keyframes flash-neutral {
+  from { background-color: color-mix(in oklab, var(--color-side-a) 16%, transparent); }
+  to { background-color: transparent; }
+}
+.flash-up { animation: flash-up 1.2s ease-out; }
+.flash-down { animation: flash-down 1.2s ease-out; }
+.flash-neutral { animation: flash-neutral 1.2s ease-out; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.live-dot { animation: pulse-dot 2s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .flash-up, .flash-down, .flash-neutral, .live-dot { animation: none; }
+  * { transition: none !important; }
+}
