@@ -273,3 +273,32 @@ export function groupByPlace(markets: readonly PlacedMarket[]): PlaceGroups {
     global: finish(global),
   };
 }
+
+/** Two places that share Markets, for an arc on the globe; `from` sorts before `to`. */
+export type SharedArc = { from: string; to: string; volume: number; count: number };
+
+export const MAX_ARCS = 15;
+
+/**
+ * The pairs of places that Markets share (a Market about the US and Iran links US↔IR), each pair once whatever
+ * order its codes come in, with the Markets' summed 24-hour volume and count. Busiest first, at most `max`.
+ * Global, single-place and unknown codes give none.
+ */
+export function sharedArcs(markets: readonly PlacedMarket[], max = MAX_ARCS): SharedArc[] {
+  const arcs = new Map<string, SharedArc>();
+  for (const m of markets) {
+    const codes = [...new Set(m.places ?? [])].filter((c) => placeInfo(c) !== null).sort(byCode);
+    for (let i = 0; i < codes.length; i++) {
+      for (let j = i + 1; j < codes.length; j++) {
+        const key = `${codes[i]}|${codes[j]}`;
+        const arc = arcs.get(key) ?? { from: codes[i], to: codes[j], volume: 0, count: 0 };
+        arc.volume += vol(m);
+        arc.count += 1;
+        arcs.set(key, arc);
+      }
+    }
+  }
+  return [...arcs.values()]
+    .sort((a, b) => b.volume - a.volume || byCode(a.from, b.from) || byCode(a.to, b.to))
+    .slice(0, max);
+}
