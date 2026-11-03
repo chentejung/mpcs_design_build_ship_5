@@ -1,8 +1,10 @@
 // The live Watchlist as a user sees it, with Supabase + Realtime replaced by a fake feed at its seam.
-import { act, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createAlert, deleteAlert } from "@/app/actions/alerts";
 import { WatchlistFeedProvider } from "@/components/watchlist-feed";
 import { WatchlistLive } from "@/components/watchlist-live";
+import type { Alert } from "@/lib/alerts";
 import type { Run } from "@/lib/runs";
 import type { Followed } from "@/lib/watchlist";
 import { fakeFeed, type FakeFeed } from "@/test/fake-feed";
@@ -398,6 +400,110 @@ describe("sparkline and Δ", () => {
     } finally {
       window.matchMedia = original;
     }
+  });
+});
+
+describe("alerts", () => {
+  const alertRow = (over: Partial<Alert> & { id: number; market_id: string }): Alert => ({
+    direction: "above",
+    threshold: 0.6,
+    created_at: "2026-11-03T11:00:00.000Z",
+    triggered_at: null,
+    triggered_price: null,
+    ...over,
+  });
+
+  function showWithAlerts(items: Followed[], alerts: Alert[], feed: FakeFeed = fakeFeed()) {
+    render(
+      <WatchlistFeedProvider value={feed.useFeed}>
+        <WatchlistLive initialItems={items} initialRuns={[run()]} initialAlerts={alerts} renderedAt={NOW} />
+      </WatchlistFeedProvider>,
+    );
+    return feed;
+  }
+  const alertLines = () => [...document.querySelectorAll("[data-alert-line]")].map((el) => el.getAttribute("data-alert-line"));
+
+  function setAlert(label: string, direction: "above" | "below", chance: string) {
+    fireEvent.click(screen.getByRole("button", { name: `Add alert on ${label}` }));
+    fireEvent.change(screen.getByLabelText("Direction"), { target: { value: direction } });
+    fireEvent.change(screen.getByLabelText("Chance (%)"), { target: { value: chance } });
+    fireEvent.click(screen.getByRole("button", { name: "Set alert" }));
+  }
+
+  beforeEach(() => {
+    vi.mocked(createAlert).mockClear();
+    vi.mocked(deleteAlert).mockClear();
+  });
+
+  it("adds an alert from a card through the Server Action and draws it as a dashed line on the bar", async () => {
+    showWithAlerts([market({ id: "1", price: 0.5 })], []);
+    setAlert("Question 1?", "above", "60");
+    await waitFor(() => expect(screen.getByText("Yes above 60%")).toBeInTheDocument());
+    expect(createAlert).toHaveBeenCalledWith({ marketId: "1", direction: "above", chance: 60 });
+    expect(alertLines()).toEqual(["0.6"]);
+  });
+
+  it("names the first Outcome on a Market between two teams", async () => {
+    showWithAlerts([market({ id: "1", outcomes: ["Hawks", "Pacers"], price: 0.5 })], []);
+    setAlert("Question 1?", "below", "40");
+    await waitFor(() => expect(screen.getByText("Hawks below 40%")).toBeInTheDocument());
+  });
+
+  it("warns before creating an alert the Price is already past", async () => {
+    showWithAlerts([market({ id: "1", price: 0.62 })], []);
+    setAlert("Question 1?", "above", "60");
+    expect(screen.getByRole("alert")).toHaveTextContent("Yes is already above 60%");
+    expect(createAlert).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Set anyway" }));
+    await waitFor(() => expect(screen.getByText("Yes above 60%")).toBeInTheDocument());
+    expect(createAlert).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the Server Action's message when the alert can't be set", async () => {
+    vi.mocked(createAlert).mockResolvedValueOnce({ ok: false, message: "Alert limit reached (3 per Market). Delete one to add another." });
+    showWithAlerts([market({ id: "1", price: 0.5 })], []);
+    setAlert("Question 1?", "above", "70");
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Alert limit reached (3 per Market)"));
+    expect(alertLines()).toEqual([]);
+  });
+
+  it("shows a triggered alert from the snapshot refetch as Alert hit, listed under Triggered", async () => {
+    const m = market({ id: "1", price: 0.5 });
+    const feed = showWithAlerts([m], [alertRow({ id: 7, market_id: "1" })]);
+    expect(alertLines()).toEqual(["0.6"]);
+    expect(screen.queryByText("Alert hit")).not.toBeInTheDocument();
+
+    feed.snapshot = {
+      follows: [{ created_at: m.followed_at, markets: market({ id: "1", price: 0.65 }) }],
+      runs: [run()],
+      alerts: [alertRow({ id: 7, market_id: "1", triggered_at: "2026-11-03T11:58:00.000Z", triggered_price: 0.65 })],
+    };
+    feed.setConnection("lost");
+    feed.setConnection("live");
+
+    await waitFor(() => expect(screen.getByText("Alert hit")).toBeInTheDocument());
+    const triggered = screen.getByRole("region", { name: "Triggered" });
+    expect(within(triggered).getByText("Yes above 60%")).toBeInTheDocument();
+    expect(within(triggered).getByText(/hit at 65%/)).toBeInTheDocument();
+    expect(alertLines()).toEqual([]);
+  });
+
+  it("deletes an alert through the Server Action and removes it", async () => {
+    showWithAlerts(
+      [market({ id: "1", price: 0.5 })],
+      [
+        alertRow({ id: 7, market_id: "1", triggered_at: "2026-11-03T11:58:00.000Z", triggered_price: 0.65 }),
+        alertRow({ id: 8, market_id: "1", direction: "below", threshold: 0.3 }),
+      ],
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete alert Yes above 60% on Question 1?" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Triggered" })).not.toBeInTheDocument());
+    expect(deleteAlert).toHaveBeenCalledWith(7);
+    expect(screen.queryByText("Alert hit")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete alert Yes below 30% on Question 1?" }));
+    await waitFor(() => expect(alertLines()).toEqual([]));
+    expect(deleteAlert).toHaveBeenCalledWith(8);
   });
 });
 

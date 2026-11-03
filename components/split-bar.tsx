@@ -4,6 +4,7 @@
 // Market, so the app never looks like it's rooting for a side; direction colour lives in the arrow.
 // Product rule 3: when the displayed Chance moves by ≥ 0.1 point (a `move`), both Chances roll to their new
 // values and the bar glides; smaller changes don't animate, and with reduced motion nothing does.
+// Active Alerts are drawn as dashed lines across the bar at their thresholds.
 import { useReducedMotion } from "@/components/use-reduced-motion";
 import { splitChances } from "@/lib/format";
 
@@ -15,6 +16,7 @@ export function SplitBar({
   muted = false,
   move,
   size = "md",
+  lines = [],
 }: {
   outcomes: readonly string[];
   price: number | null;
@@ -23,6 +25,8 @@ export function SplitBar({
   /** The last ≥ 0.1-point move; a new seq replays the roll. */
   move?: Move;
   size?: "md" | "lg";
+  /** Prices (0–1) to mark with a dashed line: the card's active Alerts. */
+  lines?: readonly number[];
 }) {
   const reduced = useReducedMotion();
   const [a, b] = outcomes;
@@ -53,7 +57,7 @@ export function SplitBar({
         </span>
       </div>
       <div
-        className="mt-2 flex h-2.5 overflow-hidden rounded-full bg-side-b"
+        className="relative mt-2 flex h-2.5 overflow-hidden rounded-full bg-side-b"
         role="img"
         aria-label={`${a} ${chanceA}% chance, ${b} ${chanceB}% chance`}
       >
@@ -61,6 +65,15 @@ export function SplitBar({
           className="h-full rounded-l-full bg-side-a transition-[width] duration-700 ease-out motion-reduce:transition-none"
           style={{ width }}
         />
+        {lines.map((t) => (
+          <span
+            key={t}
+            aria-hidden
+            data-alert-line={t}
+            className="absolute inset-y-0 w-0 border-l-2 border-dashed border-accent"
+            style={{ left: `${t * 100}%` }}
+          />
+        ))}
       </div>
     </div>
   );

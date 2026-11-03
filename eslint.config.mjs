@@ -10,6 +10,8 @@ const eslintConfig = defineConfig([
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
+    // Agent worktrees (Claude Code) hold full checkouts and build output.
+    ".claude/**",
     "build/**",
     "next-env.d.ts",
     // The Deno worker is checked by Deno, not by Next.js.

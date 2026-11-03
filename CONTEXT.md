@@ -63,6 +63,13 @@ _Avoid_: save, subscribe, favorite, bookmark
 All of one user's Follows: live Markets first, then a collapsed Finished section.
 _Avoid_: portfolio, my list, dashboard
 
+**Alert**:
+A user's level on a Market they Follow: "tell me when the first Outcome is **above** (or **below**) X%", phrased
+with the Outcome ("Yes above 60%", "Hawks below 40%"). It is **triggered** once, by the first changed Price that
+crosses it, and records that Price and time; it never fires again. In-app only. At most 3 per Market and 50 per
+user; Unfollowing a Market deletes its Alerts.
+_Avoid_: notification, trigger (as a noun), watch
+
 ## The system
 
 **Run**:

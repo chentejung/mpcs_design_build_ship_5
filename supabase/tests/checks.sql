@@ -1,4 +1,4 @@
--- SQL checks for migrations 0001–0005. Everything runs in one transaction that is
+-- SQL checks for migrations 0001–0006. Everything runs in one transaction that is
 -- rolled back, so it leaves no data behind. Run it through the Supabase MCP
 -- execute_sql (or psql). Each check raises an error on failure and a
 -- "PASS …" notice on success. Uses Market ids m1…m31, which never collide with
@@ -144,6 +144,141 @@ do $$ declare n int; begin
     raise exception 'category weather was accepted';
   exception when check_violation then null; end;
   raise notice 'PASS Categories: finance, tech, world, culture accepted; weather rejected';
+end $$;
+
+-- ── (0006) Alerts ───────────────────────────────────────────────────────────
+-- State so far: user_A Follows m1…m25 (m1 Finished); m2, m3, m5…m29 are at 0.5, m4 at 0.7.
+
+-- 10. apply_prices triggers a crossed Alert exactly once; an unchanged Price triggers nothing.
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"user_A"}';
+insert into public.alerts (market_id, direction, threshold) values
+  ('m5', 'above', 0.6),   -- crossed by 0.65
+  ('m5', 'below', 0.3),   -- not crossed
+  ('m6', 'above', 0.4);   -- already past, but m6's Price won't change
+set local role service_role;
+do $$ declare a int; b int; c int; t timestamptz; r record; begin
+  a := public.apply_prices('[{"id":"m5","price":0.65},{"id":"m6","price":0.5}]');
+  select * into r from public.alerts where market_id = 'm5' and direction = 'above';
+  assert a = 1, 'one Market changed, got '||a;
+  assert r.triggered_at is not null and r.triggered_price = 0.65, 'm5 above 0.6 should trigger at 0.65';
+  assert (select triggered_at is null from public.alerts where market_id = 'm5' and direction = 'below'),
+    'm5 below 0.3 is not crossed';
+  assert (select triggered_at is null from public.alerts where market_id = 'm6'),
+    'm6 Price unchanged: nothing triggers';
+  t := r.triggered_at;
+
+  b := public.apply_prices('[{"id":"m5","price":0.65},{"id":"m6","price":0.5}]');
+  assert b = 0, 'same input should change 0 rows, got '||b;
+  assert (select count(*) from public.alerts where triggered_at is not null and market_id like 'm%') = 1,
+    'same input triggered something';
+
+  c := public.apply_prices('[{"id":"m5","price":0.7}]');  -- changed again, still above
+  select * into r from public.alerts where market_id = 'm5' and direction = 'above';
+  assert c = 1 and r.triggered_at = t and r.triggered_price = 0.65, 'an Alert fires once';
+  raise notice 'PASS alerts: crossed once (% changed), same input % changed and triggered nothing, uncrossed stays untriggered', a, b;
+end $$;
+
+-- 11. Only on a Followed Market, at most 3 per Market, threshold strictly between 0 and 1.
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"user_A"}';
+do $$ begin
+  begin
+    insert into public.alerts (market_id, direction, threshold) values ('m26', 'above', 0.6);
+    raise exception 'Alert on an unfollowed Market accepted';
+  exception when foreign_key_violation then null; end;
+  insert into public.alerts (market_id, direction, threshold) values
+    ('m7', 'above', 0.6), ('m7', 'above', 0.7), ('m7', 'below', 0.2);
+  begin
+    insert into public.alerts (market_id, direction, threshold) values ('m7', 'below', 0.1);
+    raise exception '4th Alert on one Market accepted';
+  exception when check_violation then
+    assert sqlerrm = 'Alert limit reached (3 per Market)', 'wrong message: '||sqlerrm;
+  end;
+  begin
+    insert into public.alerts (market_id, direction, threshold) values ('m8', 'above', 1);
+    raise exception 'threshold 1 accepted';
+  exception when check_violation then null; end;
+  begin
+    insert into public.alerts (market_id, direction, threshold) values ('m8', 'sideways', 0.5);
+    raise exception 'direction sideways accepted';
+  exception when check_violation then null; end;
+  raise notice 'PASS alerts: unfollowed Market rejected, 4th on one Market rejected, bad threshold/direction rejected';
+end $$;
+
+-- 12. Unfollow deletes that Market's Alerts.
+do $$ declare n int; begin
+  delete from public.follows where market_id = 'm7';
+  select count(*) into n from public.alerts where market_id = 'm7';
+  assert n = 0, 'Unfollow left '||n||' Alerts';
+  raise notice 'PASS alerts: Unfollow deleted the Market''s Alerts';
+end $$;
+
+-- 13. Two-user isolation on alerts. (Before 14: the limit trigger runs before RLS's check, so
+-- B inserting as A must not meet A's 50-Alert limit first.)
+set local request.jwt.claims = '{"sub":"user_B"}';
+do $$ declare n int; begin
+  assert (select count(*) from public.alerts) = 0, 'B sees A''s Alerts';
+  delete from public.alerts;
+  get diagnostics n = row_count;
+  assert n = 0, 'B deleted A''s Alerts';
+  begin
+    insert into public.alerts (user_id, market_id, direction, threshold) values ('user_A', 'm2', 'above', 0.6);
+    raise exception 'B inserted an Alert as A';
+  exception when insufficient_privilege then null; end;
+  begin
+    update public.alerts set threshold = 0.5;
+    raise exception 'update allowed';
+  exception when insufficient_privilege then null; end;
+  raise notice 'PASS alerts isolation: B sees 0, deletes 0, cannot insert as A or update';
+end $$;
+set local request.jwt.claims = '{"sub":"user_A"}';
+do $$ begin
+  assert (select count(*) from public.alerts) = 3, 'A lost Alerts to B';
+  begin
+    update public.alerts set triggered_at = null;
+    raise exception 'owner updated an Alert';
+  exception when insufficient_privilege then null; end;
+end $$;
+
+-- 14. At most 50 Alerts per user.
+do $$ declare g int := 8; begin
+  -- m5 has 2, m6 has 1; fill up to 50 from m8 on, 3 per Market.
+  while (select count(*) from public.alerts) < 50 loop
+    insert into public.alerts (market_id, direction, threshold)
+    select 'm'||g, 'above', 0.9 from generate_series(1, least(3, 50 - (select count(*) from public.alerts)::int));
+    g := g + 1;
+  end loop;
+  begin
+    insert into public.alerts (market_id, direction, threshold) values ('m25', 'above', 0.9);
+    raise exception '51st Alert accepted';
+  exception when check_violation then
+    assert sqlerrm = 'Alert limit reached (50)', 'wrong message: '||sqlerrm;
+  end;
+  raise notice 'PASS alerts: the 51st Alert is rejected';
+end $$;
+
+-- 14b. With A at 50, B inserting as A meets RLS, not A's limit message (the trigger counts only the
+-- caller's own Alerts, so it never reveals another user's limit).
+set local request.jwt.claims = '{"sub":"user_B"}';
+do $$ begin
+  begin
+    insert into public.alerts (user_id, market_id, direction, threshold) values ('user_A', 'm2', 'above', 0.6);
+    raise exception 'B inserted an Alert as A';
+  exception
+    when insufficient_privilege then null;
+    when check_violation then raise exception 'leak: B saw A''s limit: %', sqlerrm;
+  end;
+  raise notice 'PASS alerts: another user''s limit is never revealed';
+end $$;
+
+-- 15. Signed out (anon) can't read alerts, and alerts isn't published to Realtime.
+set local role anon;
+do $$ begin
+  begin perform 1 from public.alerts; raise exception 'anon read alerts'; exception when insufficient_privilege then null; end;
+  assert not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'alerts'),
+    'alerts is published to Realtime';
+  raise notice 'PASS alerts: anon reads nothing; not published to Realtime';
 end $$;
 
 rollback;
