@@ -39,3 +39,6 @@ vi.mock("@/app/actions/alerts", () => {
     deleteAlert: vi.fn(async () => ({ ok: true })),
   };
 });
+vi.mock("@/app/actions/visits", () => ({
+  recordVisit: vi.fn(async () => {}),
+}));

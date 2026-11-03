@@ -281,6 +281,67 @@ do $$ begin
   assert not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'alerts'),
     'alerts is published to Realtime';
   raise notice 'PASS alerts: anon reads nothing; not published to Realtime';
+reset role;
+
+-- 16. (0007) Visits: the app's upsert (no user_id; the default fills it) records and then updates one row per user,
+-- and user B can't see, update, insert as or delete A's visit.
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"user_A"}';
+do $$ begin
+  insert into public.visits (last_seen_at) values ('2026-11-01T00:00:00Z')
+    on conflict (user_id) do update set last_seen_at = excluded.last_seen_at;
+  insert into public.visits (last_seen_at) values ('2026-11-02T00:00:00Z')
+    on conflict (user_id) do update set last_seen_at = excluded.last_seen_at;
+  assert (select count(*) from public.visits) = 1, 'A should have exactly one visit row';
+  assert (select user_id from public.visits) = 'user_A', 'user_id should come from the JWT';
+  assert (select last_seen_at from public.visits) = '2026-11-02T00:00:00Z', 'second visit should update the row';
+end $$;
+
+set local request.jwt.claims = '{"sub":"user_B"}';
+do $$ declare n int; begin
+  assert (select count(*) from public.visits) = 0, 'B sees A''s visit';
+  update public.visits set last_seen_at = '2030-01-01T00:00:00Z' where user_id = 'user_A';
+  get diagnostics n = row_count;
+  assert n = 0, 'B updated A''s visit';
+  begin
+    insert into public.visits (user_id, last_seen_at) values ('user_A', '2030-01-01T00:00:00Z');
+    raise exception 'B inserted as A';
+  exception when insufficient_privilege then null; end;
+  begin
+    delete from public.visits;
+    raise exception 'delete allowed';
+  exception when insufficient_privilege then null; end;
+  insert into public.visits (last_seen_at) values ('2026-11-03T00:00:00Z')
+    on conflict (user_id) do update set last_seen_at = excluded.last_seen_at;
+  assert (select count(*) from public.visits) = 1, 'B should see only their own new visit';
+  raise notice 'PASS visits isolation: B sees 0, updates 0, cannot insert as A or delete; own upsert works';
+end $$;
+
+set local request.jwt.claims = '{"sub":"user_A"}';
+do $$ begin
+  assert (select last_seen_at from public.visits) = '2026-11-02T00:00:00Z', 'A''s visit was changed by B';
+end $$;
+
+-- 17. (0007) Signed out (anon) can't read or write visits.
+set local role anon;
+do $$ begin
+  begin perform 1 from public.visits; raise exception 'anon read visits'; exception when insufficient_privilege then null; end;
+  begin
+    insert into public.visits (user_id, last_seen_at) values ('x', now());
+    raise exception 'anon wrote visits';
+  exception when insufficient_privilege then null; end;
+  raise notice 'PASS anon: no access to visits';
+end $$;
+
+reset role;
+
+-- 18. (0007) visits has RLS on and isn't published to Realtime.
+do $$ begin
+  assert (select relrowsecurity from pg_class where oid = 'public.visits'::regclass), 'RLS off on visits';
+  assert not exists (select 1 from pg_publication_tables
+                     where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'visits'),
+    'visits is in supabase_realtime';
+  raise notice 'PASS visits: RLS on, not in supabase_realtime';
 end $$;
 
 rollback;

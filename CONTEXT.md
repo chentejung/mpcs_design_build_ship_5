@@ -70,6 +70,13 @@ crosses it, and records that Price and time; it never fires again. In-app only. 
 user; Unfollowing a Market deletes its Alerts.
 _Avoid_: notification, trigger (as a noun), watch
 
+**Recap**:
+What changed on a user's Watchlist since their last visit, shown at the top of it: each followed Market whose
+displayed Chance moved by at least 2 points (from → to, with direction), and each Market that became Finished.
+"Nothing big moved since …" when none did; no Recap on a first visit. Prices are kept for 7 days, so after a longer
+absence the Recap covers only the last 7 days and says so. **Replay** animates each bar from then to now.
+_Avoid_: digest, summary, notifications
+
 ## The system
 
 **Run**:

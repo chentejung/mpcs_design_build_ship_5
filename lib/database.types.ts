@@ -191,6 +191,21 @@ export type Database = {
         }
         Relationships: []
       }
+      visits: {
+        Row: {
+          last_seen_at: string
+          user_id: string
+        }
+        Insert: {
+          last_seen_at?: string
+          user_id?: string
+        }
+        Update: {
+          last_seen_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       worker_runs: {
         Row: {
           catalog_refreshed: boolean

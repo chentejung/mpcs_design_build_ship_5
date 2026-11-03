@@ -12,7 +12,7 @@ through Supabase Realtime. Nobody trades in the app. The full build plan, with v
 ## Language
 
 Terms are defined in [`CONTEXT.md`](CONTEXT.md): **Market**, **Event**, **Outcome**, **Category**, **Catalog**,
-**Finished**, **Price**, **Chance**, **Moved**, **Follow**, **Watchlist**, **Alert**, **Run**, and the **Freshness** states
+**Finished**, **Price**, **Chance**, **Moved**, **Follow**, **Watchlist**, **Alert**, **Recap**, **Run**, and the **Freshness** states
 **Fresh / Stale / Down**. Use them in code, UI and docs. The UI says **Chance** (a %); code and data say **Price**
 (0–1). Never "odds" in the UI or the code — "Odds Desk" is only the name.
 
@@ -61,6 +61,7 @@ The schema is defined **only** by migrations in `supabase/migrations/`. Tables:
 | `price_history` | `market_id`, `price`, `recorded_at` — one row per actual change; pruned after 7 days | the worker only |
 | `follows` | `user_id text default (auth.jwt()->>'sub')`, `market_id`, `created_at`; primary key `(user_id, market_id)` | the signed-in user |
 | `alerts` | One row per Alert: `user_id text default (auth.jwt()->>'sub')`, `market_id`, `direction` (`above`/`below`), `threshold numeric(6,4)` strictly between 0 and 1, `created_at`, `triggered_at`, `triggered_price`. Foreign key `(user_id, market_id)` → `follows` `on delete cascade`, so an Alert exists only on a Followed Market and Unfollow / Clear finished delete it. A trigger allows at most 3 per Market and 50 per user ("Alert limit reached (3 per Market)" / "(50)") | the signed-in user (create, delete); the worker sets `triggered_at`/`triggered_price` in `apply_prices` |
+| `visits` | One row per user: `user_id text` primary key `default (auth.jwt()->>'sub')`, `last_seen_at` — when they last opened the Watchlist, for the **Recap** | the signed-in user (an upsert on `user_id` that never sets it) |
 | `worker_runs` | One row per Run: `started_at`, `finished_at`, `ok`, `skipped`, `rows_changed`, `catalog_refreshed`, `warnings text[]`, `error`, `duration_ms`; pruned after 2 days | the worker only |
 | `run_lock` | A single-row lease (`holder uuid`, `locked_until`) so overlapping Runs skip. A session advisory lock can't be used: the worker reaches Postgres through a connection pool | the worker only, via `try_run_lock()` / `release_run_lock(uuid)` |
 
@@ -73,6 +74,8 @@ RLS is enabled on **every** table, and grants match the policies exactly:
 - `follows`: select, insert, delete to `authenticated` only, where `user_id = (auth.jwt() ->> 'sub')`. No update.
 - `alerts`: the same as `follows` — select, insert, delete to `authenticated` only, own rows only. No update by users;
   not published to Realtime (the Watchlist picks up `triggered_at` on its snapshot refetch).
+- `visits`: select, insert, update to `authenticated` only, where `user_id = (auth.jwt() ->> 'sub')` (update also
+  `with check`). No delete; not published to Realtime.
 - `run_lock`: RLS on, no policies and no grants to `anon`/`authenticated`; not published to Realtime.
 - No write policies anywhere else. The worker writes with the Supabase **secret key**, which bypasses RLS; it exists
   **only** inside the Edge Function's environment, never in this repo, `.env*` files or Vercel.
@@ -87,6 +90,11 @@ every (re)subscribe it **refetches its snapshot**, because Realtime doesn't repl
 The Watchlist's snapshot (first render and every refetch, `lib/watchlist-query.ts`) also reads each followed
 Market's last 24 h of `price_history` (≤ 1000 rows, plus the last row before then) for its sparkline and **Δ** 1h /
 24h. Live points come from the `markets` UPDATEs above (`lib/history.ts`); `price_history` is **not** published.
+
+The **Recap** is computed once per page load on the server (`lib/recap.ts`): the page reads the previous
+`visits.last_seen_at`, then each followed Market's last `price_history` row at or before it (at most 7 days back,
+because of pruning). The browser then records the current visit through the `recordVisit` Server Action. The Recap
+isn't refetched and `visits` is **not** published.
 
 ## The worker
 
@@ -137,8 +145,8 @@ Each card separately shows when it **Moved** (`price_changed_at`), so a quiet Ma
 ## Data access
 
 - **Server:** `lib/supabase.ts` (from Assignment 4) — every call carries the signed-in user's Clerk session token, so RLS
-  applies; signed out it runs as `anon`. Browse, follow/unfollow/clear finished and create/delete Alert (Server
-  Actions) and initial page data.
+  applies; signed out it runs as `anon`. Browse, follow/unfollow/clear finished, create/delete Alert and record visit
+  (Server Actions) and initial page data.
 - **Browser:** `lib/supabase-browser.ts`, **for Realtime on the Watchlist and `/status` only**, using
   `NEXT_PUBLIC_SUPABASE_URL` + the publishable key and Clerk's `session.getToken()`. This is the one change from
   Assignment 4's "the browser never talks to Supabase" rule; it only ever reads, through RLS.
@@ -181,7 +189,8 @@ Each card separately shows when it **Moved** (`price_changed_at`), so a quiet Ma
   Follow); the 26th Follow is rejected; Alerts (0006): a crossing triggers exactly once, the same input again changes 0
   rows and triggers nothing, an uncrossed Alert stays untriggered, an Alert on an unfollowed Market and the 4th on one
   Market (and the 51st per user) are rejected, Unfollow deletes that Market's Alerts, user B can't see or delete A's
-  Alerts, and `alerts` isn't published to Realtime. All in `supabase/tests/checks.sql`.
+  Alerts, and `alerts` isn't published to Realtime; Visits (0007): user B can't see or update A's `visits` row,
+  `anon` can't read `visits`, and it isn't in `supabase_realtime`. All in `supabase/tests/checks.sql`.
 - No Playwright in this iteration.
 
 ## Repo, env and deploy
