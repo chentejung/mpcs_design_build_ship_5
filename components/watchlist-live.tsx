@@ -7,7 +7,9 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { clearFinished } from "@/app/actions/follows";
 import { FreshnessView, Heartbeat, isMuted } from "@/components/freshness";
+import { Heatmap, ViewToggle } from "@/components/heatmap";
 import { useNow } from "@/components/use-now";
+import { useWatchlistView } from "@/components/use-watchlist-view";
 import { WatchCard } from "@/components/watch-card";
 import { useWatchlistFeed } from "@/components/watchlist-feed";
 import { freshness } from "@/lib/freshness";
@@ -29,6 +31,7 @@ export function WatchlistLive({
   const [runs, setRuns] = useState(initialRuns);
   const [clearing, startClearing] = useTransition();
   const [ids] = useState(() => initialItems.map((m) => m.id));
+  const [view, setView] = useWatchlistView();
 
   const { connection, loadSnapshot } = useWatchlistFeed({
     marketIds: ids,
@@ -69,6 +72,7 @@ export function WatchlistLive({
           <p className="num mt-1 text-xs text-faint">{items.length} of {FOLLOW_LIMIT} followed</p>
         </div>
         <div className="flex items-center gap-3">
+          {items.length > 0 ? <ViewToggle view={view} onChange={setView} /> : null}
           <Heartbeat freshness={f} beat={runs[0]?.id} />
           {f.state === "fresh" || f.state === "loading" ? <FreshnessView freshness={f} now={now} /> : null}
         </div>
@@ -87,7 +91,9 @@ export function WatchlistLive({
         </div>
       ) : (
         <>
-          {live.length > 0 ? (
+          {live.length > 0 && view === "heatmap" ? (
+            <Heatmap live={live} now={now} muted={muted} />
+          ) : live.length > 0 ? (
             <ul className="mt-6 grid gap-3 md:grid-cols-2">
               {live.map((m) => <WatchCard key={m.id} market={m} now={now} muted={muted} />)}
             </ul>

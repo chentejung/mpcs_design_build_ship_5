@@ -40,6 +40,8 @@ Terms are defined in [`CONTEXT.md`](CONTEXT.md): **Market**, **Event**, **Outcom
 4. **At most 25 Follows per user, Finished included**, enforced by a database trigger ("Watchlist full (25)").
 5. **Watchlist:** live Markets first, in Follow order (no reordering while you read), then a collapsed
    **Finished (n)** section with **Clear finished** (deletes those Follows). Finished cards show the frozen final split.
+   A remembered **Cards / Heatmap** toggle shows the live Markets as tiles sized by 24 h volume and shaded by Δ 1h
+   (rule 3 colours; Finished left out); a tile opens its card in a panel.
 6. **Browse** (`/browse?category=politics|sports|crypto|finance|tech|world|culture`, default `politics`) is grouped by Event, sorted by 24-hour
    volume, hides Markets ending within the next hour and shows "Ends in …" on the rest. A Market past its end
    date that is still trading stays: on Sports that's a game in play (gamma's end date is the kickoff), marked

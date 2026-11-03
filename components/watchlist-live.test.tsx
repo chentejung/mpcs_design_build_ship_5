@@ -401,3 +401,147 @@ describe("sparkline and Δ", () => {
   });
 });
 
+
+// Heatmap (#12). Its imports sit here, beside its tests, so parallel additions to this file don't collide.
+import { cleanup, fireEvent } from "@testing-library/react";
+import { afterEach, beforeEach } from "vitest";
+
+describe("heatmap", () => {
+  const atNow = () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(NOW));
+  };
+  const t = (iso: string) => new Date(iso).getTime();
+  const heatmap = () => screen.getByRole("list", { name: "Heatmap" });
+  const toHeatmap = () => fireEvent.click(screen.getByRole("button", { name: "Heatmap" }));
+  // One point an hour and a half ago, so Δ 1h is the current Price minus it.
+  const rising = [{ at: t("2026-11-03T10:30:00.000Z"), price: 0.6 }];
+  const falling = [{ at: t("2026-11-03T10:30:00.000Z"), price: 0.7 }];
+
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
+
+  it("switches between Cards and Heatmap with a labelled toggle", () => {
+    show([market({ id: "1" })]);
+    const toggle = screen.getByRole("group", { name: "Watchlist view" });
+    expect(within(toggle).getByRole("button", { name: "Cards" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("list", { name: "Heatmap" })).not.toBeInTheDocument();
+    toHeatmap();
+    expect(within(toggle).getByRole("button", { name: "Heatmap" })).toHaveAttribute("aria-pressed", "true");
+    expect(heatmap()).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Unfollow Question 1?" })).not.toBeInTheDocument();
+    fireEvent.click(within(toggle).getByRole("button", { name: "Cards" }));
+    expect(screen.queryByRole("list", { name: "Heatmap" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unfollow Question 1?" })).toBeInTheDocument();
+  });
+
+  it("remembers the chosen view", () => {
+    show([market({ id: "1" })]);
+    toHeatmap();
+    cleanup();
+    show([market({ id: "1" })]);
+    expect(heatmap()).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Heatmap" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("shows each live Market's label, first Outcome's Chance and Δ 1h, and leaves Finished ones out", () => {
+    atNow();
+    show([
+      market({ id: "1", question: "Live one?", price: 0.624, history: rising }),
+      market({ id: "2", question: "Ended one?", closed: true, closed_at: "2026-11-02T00:00:00.000Z" }),
+    ]);
+    toHeatmap();
+    const tiles = within(heatmap()).getAllByRole("button");
+    expect(tiles).toHaveLength(1);
+    expect(tiles[0]).toHaveAccessibleName("Live one?: Yes 62.4%, Δ 1h +2.4");
+    expect(tiles[0]).toHaveTextContent("Live one?");
+    expect(tiles[0]).toHaveTextContent("Yes 62.4%");
+  });
+
+  it("shades a Yes/No Market up or down by its Δ 1h", () => {
+    atNow();
+    show([
+      market({ id: "1", question: "Rising?", price: 0.62, history: rising }),
+      market({ id: "2", question: "Falling?", price: 0.62, history: falling }),
+    ]);
+    toHeatmap();
+    expect(screen.getByRole("button", { name: "Rising?: Yes 62%, Δ 1h +2.0" })).toHaveAttribute("data-tone", "up");
+    expect(screen.getByRole("button", { name: "Falling?: Yes 62%, Δ 1h −8.0" })).toHaveAttribute("data-tone", "down");
+  });
+
+  it("keeps a Market between two teams neutral", () => {
+    atNow();
+    show([market({ id: "1", question: "Hawks vs. Pacers", outcomes: ["Hawks", "Pacers"], price: 0.62, history: rising })]);
+    toHeatmap();
+    expect(screen.getByRole("button", { name: "Hawks vs. Pacers: Hawks 62%, Δ 1h +2.0" }))
+      .toHaveAttribute("data-tone", "neutral");
+  });
+
+  it("is flat without enough history or without a move", () => {
+    atNow();
+    show([
+      market({ id: "1", question: "New?", price: 0.62 }),
+      market({ id: "2", question: "Still?", price: 0.6, history: rising }),
+    ]);
+    toHeatmap();
+    expect(screen.getByRole("button", { name: "New?: Yes 62%, Δ 1h —" })).toHaveAttribute("data-tone", "flat");
+    expect(screen.getByRole("button", { name: "Still?: Yes 60%, Δ 1h 0.0" })).toHaveAttribute("data-tone", "flat");
+  });
+
+  it("sizes tiles by 24-hour volume", () => {
+    show([
+      market({ id: "1", question: "Big?", volume_24h: 1_000_000 }),
+      market({ id: "2", question: "Mid?", volume_24h: 200_000 }),
+      market({ id: "3", question: "Small?", volume_24h: 5_000 }),
+      market({ id: "4", question: "None?", volume_24h: null }),
+    ]);
+    toHeatmap();
+    expect(screen.getByRole("button", { name: /^Big\?/ })).toHaveAttribute("data-size", "lg");
+    expect(screen.getByRole("button", { name: /^Mid\?/ })).toHaveAttribute("data-size", "md");
+    expect(screen.getByRole("button", { name: /^Small\?/ })).toHaveAttribute("data-size", "sm");
+    expect(screen.getByRole("button", { name: /^None\?/ })).toHaveAttribute("data-size", "sm");
+  });
+
+  it("updates a tile's Chance and tone from a pushed update", () => {
+    atNow();
+    const feed = show([market({ id: "1", question: "Live one?", price: 0.6, history: rising })]);
+    toHeatmap();
+    expect(screen.getByRole("button", { name: "Live one?: Yes 60%, Δ 1h 0.0" })).toHaveAttribute("data-tone", "flat");
+    feed.pushMarket({ id: "1", price: 0.55, price_changed_at: NOW });
+    const tile = screen.getByRole("button", { name: "Live one?: Yes 55%, Δ 1h −5.0" });
+    expect(tile).toHaveTextContent("Yes 55%");
+    expect(tile).toHaveAttribute("data-tone", "down");
+  });
+
+  it("shows a Market's card details when its tile is activated, and hides them again", () => {
+    show([market({ id: "1", question: "First?" }), market({ id: "2", question: "Second?" })]);
+    toHeatmap();
+    const tile = screen.getByRole("button", { name: /^Second\?/ });
+    expect(tile).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(tile);
+    expect(tile).toHaveAttribute("aria-expanded", "true");
+    const details = screen.getByRole("region", { name: "Second? details" });
+    expect(within(details).getByRole("button", { name: "Unfollow Second?" })).toBeInTheDocument();
+    expect(within(details).getByRole("img", { name: "Yes 62% chance, No 38% chance" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Unfollow First?" })).not.toBeInTheDocument();
+    fireEvent.click(within(details).getByRole("button", { name: "Close details" }));
+    expect(screen.queryByRole("region", { name: "Second? details" })).not.toBeInTheDocument();
+  });
+
+  it("has no transitions on tiles when the viewer prefers reduced motion", () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    try {
+      show([market({ id: "1", question: "Live one?" })]);
+      toHeatmap();
+      expect(screen.getByRole("button", { name: /^Live one\?/ })).toHaveAttribute("data-motion", "off");
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+});
