@@ -18,6 +18,7 @@ trade, so we compete on **watching**: live movement made visible, a personal rec
 | Animation | (1) rolling digits + bar glide, (3) live sparkline, (4) alert line on bar and sparkline, (5) Freshness heartbeat in the header, (6) Watchlist heatmap view, (7) "Since your last visit" replay. All off under `prefers-reduced-motion`. |
 | Features | Sparkline + Δ 1h / Δ 24h, "Since your last visit" recap, price alerts. |
 | Alerts | **In-app only**: badge, toast and a "Triggered" list. No email or push, no new service. |
+| UI tests | vitest + React Testing Library (jsdom): render the live Watchlist with a fake Realtime source; Browse cards, Category tabs and the theme toggle as components. Still no Playwright. Spec: issue #1. |
 
 ## Build steps (one commit each)
 
