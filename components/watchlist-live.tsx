@@ -1,28 +1,18 @@
 "use client";
-// The live Watchlist (AGENTS.md → Realtime, Product rule 5). It subscribes to UPDATEs of the followed Markets only
-// (id=in.(…), ≤ 25) and to new worker_runs for Freshness. Realtime doesn't replay what was missed, so every
-// (re)subscribe refetches the snapshot. The Clerk session token makes RLS apply to the subscription.
+// The live Watchlist (AGENTS.md → Realtime, Product rule 5). Its feed (components/watchlist-feed.tsx) delivers
+// UPDATEs of the followed Markets only (id=in.(…), ≤ 25) and new worker_runs for Freshness. Realtime doesn't
+// replay what was missed, so every (re)subscribe refetches the snapshot.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { clearFinished } from "@/app/actions/follows";
 import { FreshnessView, isMuted } from "@/components/freshness";
 import { useNow } from "@/components/use-now";
-import { useRealtimeChannel } from "@/components/use-realtime";
 import { WatchCard } from "@/components/watch-card";
+import { useWatchlistFeed } from "@/components/watchlist-feed";
 import { freshness } from "@/lib/freshness";
-import { MARKET_COLUMNS, type Market } from "@/lib/markets";
-import { mergeRuns, RUN_COLUMNS, RUN_LOG_SIZE, type Run } from "@/lib/runs";
-import { useSupabaseBrowser } from "@/lib/supabase-browser";
-import {
-  applyMarketUpdate,
-  FOLLOW_LIMIT,
-  marketsFilter,
-  splitWatchlist,
-  toFollowed,
-  type FollowRow,
-  type Followed,
-} from "@/lib/watchlist";
+import { mergeRuns, type Run } from "@/lib/runs";
+import { applyMarketUpdate, FOLLOW_LIMIT, splitWatchlist, toFollowed, type Followed } from "@/lib/watchlist";
 
 export function WatchlistLive({
   initialItems,
@@ -33,7 +23,6 @@ export function WatchlistLive({
   initialRuns: Run[];
   renderedAt: string;
 }) {
-  const db = useSupabaseBrowser();
   const router = useRouter();
   const now = useNow(renderedAt);
   const [items, setItems] = useState(initialItems);
@@ -41,40 +30,26 @@ export function WatchlistLive({
   const [clearing, startClearing] = useTransition();
   const [ids] = useState(() => initialItems.map((m) => m.id));
 
-  // Realtime doesn't replay what was missed: on every (re)subscribe, reload what's on screen.
+  const { connection, loadSnapshot } = useWatchlistFeed({
+    marketIds: ids,
+    onMarket: (update) => setItems((current) => applyMarketUpdate(current, update)),
+    onRun: (run) => setRuns((current) => mergeRuns(current, [run])),
+    // Realtime doesn't replay what was missed: on every (re)subscribe, reload what's on screen.
+    onSubscribed: () => void refetch(),
+  });
+
   const refetch = async () => {
-    if (!db) return;
-    const [follows, latest] = await Promise.all([
-      db.from("follows").select(`created_at, markets!inner(${MARKET_COLUMNS})`).order("created_at"),
-      db.from("worker_runs").select(RUN_COLUMNS).order("started_at", { ascending: false }).limit(RUN_LOG_SIZE),
-    ]);
-    if (follows.data) {
-      const fresh = new Map(toFollowed(follows.data as unknown as FollowRow[]).map((m) => [m.id, m]));
+    const snapshot = await loadSnapshot();
+    if (snapshot.follows) {
+      const fresh = new Map(toFollowed(snapshot.follows).map((m) => [m.id, m]));
       // Keep each card's last move, so the arrow doesn't vanish on reconnect.
       setItems((current) => current.flatMap((m) => {
         const f = fresh.get(m.id);
         return f ? [{ ...f, move: m.move }] : [];
       }));
     }
-    if (latest.data) setRuns((current) => mergeRuns(current, latest.data));
+    if (snapshot.runs) setRuns((current) => mergeRuns(current, snapshot.runs!));
   };
-
-  const filter = marketsFilter(ids);
-  const connection = useRealtimeChannel(
-    db,
-    `watchlist:${ids.join(",")}`,
-    (channel) => {
-      const withMarkets = filter
-        ? channel.on("postgres_changes", { event: "UPDATE", schema: "public", table: "markets", filter }, (payload) => {
-            setItems((current) => applyMarketUpdate(current, payload.new as Partial<Market> & { id: string }));
-          })
-        : channel;
-      return withMarkets.on("postgres_changes", { event: "INSERT", schema: "public", table: "worker_runs" }, (payload) => {
-        setRuns((current) => mergeRuns(current, [payload.new as Run]));
-      });
-    },
-    () => void refetch(),
-  );
 
   const f = freshness(runs, now, connection !== "lost");
   const muted = isMuted(f);

@@ -149,9 +149,14 @@ Each card separately shows when it **Moved** (`price_changed_at`), so a quiet Ma
 
 ## Testing
 
-- **vitest** (`npm run test:unit`) for pure logic only: `supabase/functions/sync-markets/logic.test.ts` against saved
-  real responses in `supabase/functions/sync-markets/fixtures/` (Yes/No, team-name and Over/Under Markets, grouped
-  Markets, ending-soon dropped, malformed fields skipped, bad midpoints rejected), and `lib/freshness.test.ts`.
+- **vitest** (`npm run test:unit`), two projects:
+  - **logic** (Node): `supabase/functions/sync-markets/logic.test.ts` against saved real responses in
+    `supabase/functions/sync-markets/fixtures/` (Yes/No, team-name and Over/Under Markets, grouped Markets, ending-soon
+    dropped, malformed fields skipped, bad midpoints rejected), `lib/freshness.test.ts` and the other `lib/` helpers.
+  - **ui** (jsdom, React Testing Library): `components/**/*.test.tsx`. The live Watchlist is rendered whole, with its
+    feed seam (`components/watchlist-feed.tsx`: snapshot + Realtime) replaced by the fake in `test/fake-feed.tsx`;
+    `next/navigation` and the Server Actions are mocked in `test/setup-ui.ts`. Assert what a user sees or hears
+    (roles, labels, text, `data-tone` for direction colour), never class names.
 - **SQL checks through the MCP `execute_sql`, each in a rolled-back transaction:** calling `apply_prices` twice with the
   same input changes 0 rows the second time; the two-user isolation check on `follows` (user B can't see or delete A's
   Follow); the 26th Follow is rejected.

@@ -52,9 +52,18 @@ export function WatchCard({ market, now, muted }: { market: Followed; now: Date;
           <div className="min-w-0 flex-1">
             <SplitBar outcomes={market.outcomes} price={market.price} muted={muted || market.closed} />
           </div>
-          <span className={`num w-4 text-center text-sm ${arrowColour}`} aria-hidden>
-            {move && !market.closed ? (move.dir === "up" ? "▲" : "▼") : ""}
-          </span>
+          {move && !market.closed ? (
+            <span
+              role="img"
+              aria-label={move.dir === "up" ? "Moved up" : "Moved down"}
+              data-tone={yesNo ? move.dir : "neutral"}
+              className={`num w-4 text-center text-sm ${arrowColour}`}
+            >
+              {move.dir === "up" ? "▲" : "▼"}
+            </span>
+          ) : (
+            <span className="w-4" aria-hidden />
+          )}
         </div>
 
         <p className="mt-2 flex flex-wrap gap-x-2 text-xs text-faint">
