@@ -767,3 +767,153 @@ describe("recap", () => {
   });
 });
 
+describe("live alert toast", () => {
+  const alertRow = (over: Partial<Alert> & { id: number; market_id: string }): Alert => ({
+    direction: "above",
+    threshold: 0.6,
+    created_at: "2026-11-03T11:00:00.000Z",
+    triggered_at: null,
+    triggered_price: null,
+    ...over,
+  });
+  function showWithAlerts(items: Followed[], alerts: Alert[], feed: FakeFeed = fakeFeed()) {
+    render(
+      <WatchlistFeedProvider value={feed.useFeed}>
+        <WatchlistLive initialItems={items} initialRuns={[run()]} initialAlerts={alerts} renderedAt={NOW} />
+      </WatchlistFeedProvider>,
+    );
+    return feed;
+  }
+  const toasts = () => {
+    const region = screen.getByRole("region", { name: "Alert notifications" });
+    expect(region).toHaveAttribute("aria-live", "polite");
+    return region;
+  };
+  const toastText = "Alert hit: Yes above 60% on Question 1? — now 65%";
+  const sparkLines = () =>
+    [...screen.getByRole("img", { name: /^Yes over 24 hours/ }).querySelectorAll("[data-spark-alert-line]")]
+      .map((el) => el.getAttribute("data-spark-alert-line"));
+
+  it("shows a toast and the Alert hit badge as soon as a pushed update crosses an alert", () => {
+    const feed = showWithAlerts([market({ id: "1", price: 0.55 })], [alertRow({ id: 7, market_id: "1" })]);
+    expect(within(toasts()).queryByText(/Alert hit/)).not.toBeInTheDocument();
+    feed.pushMarket({ id: "1", price: 0.65, price_changed_at: NOW });
+    expect(within(toasts()).getByText(toastText)).toBeInTheDocument();
+    expect(screen.getByText("Alert hit")).toBeInTheDocument();
+    const triggered = screen.getByRole("region", { name: "Triggered" });
+    expect(within(triggered).getByText("Yes above 60%")).toBeInTheDocument();
+  });
+
+  it("names a below alert on a team Market and the Chance it reached", () => {
+    const feed = showWithAlerts(
+      [market({ id: "1", outcomes: ["Hawks", "Pacers"], price: 0.45 })],
+      [alertRow({ id: 7, market_id: "1", direction: "below", threshold: 0.4 })],
+    );
+    feed.pushMarket({ id: "1", price: 0.4, price_changed_at: NOW });
+    expect(within(toasts()).getByText("Alert hit: Hawks below 40% on Question 1? — now 40%")).toBeInTheDocument();
+  });
+
+  it("shows nothing for an update that doesn't cross an alert", () => {
+    const feed = showWithAlerts([market({ id: "1", price: 0.5 })], [alertRow({ id: 7, market_id: "1" })]);
+    feed.pushMarket({ id: "1", price: 0.59, price_changed_at: NOW });
+    expect(within(toasts()).queryByText(/Alert hit/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Alert hit")).not.toBeInTheDocument();
+  });
+
+  it("can be dismissed", () => {
+    const feed = showWithAlerts([market({ id: "1", price: 0.55 })], [alertRow({ id: 7, market_id: "1" })]);
+    feed.pushMarket({ id: "1", price: 0.65, price_changed_at: NOW });
+    fireEvent.click(within(toasts()).getByRole("button", { name: "Dismiss" }));
+    expect(within(toasts()).queryByText(toastText)).not.toBeInTheDocument();
+    expect(screen.getByText("Alert hit")).toBeInTheDocument();
+  });
+
+  it("hides on its own after a few seconds", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.setSystemTime(new Date(NOW));
+    const feed = showWithAlerts([market({ id: "1", price: 0.55 })], [alertRow({ id: 7, market_id: "1" })]);
+    feed.pushMarket({ id: "1", price: 0.65, price_changed_at: NOW });
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(within(toasts()).getByText(toastText)).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(2_000));
+    expect(within(toasts()).queryByText(toastText)).not.toBeInTheDocument();
+  });
+
+  it("doesn't toast again when the refetched snapshot confirms the stored trigger", async () => {
+    const m = market({ id: "1", price: 0.55 });
+    const feed = showWithAlerts([m], [alertRow({ id: 7, market_id: "1" })]);
+    feed.pushMarket({ id: "1", price: 0.65, price_changed_at: NOW });
+    fireEvent.click(within(toasts()).getByRole("button", { name: "Dismiss" }));
+
+    feed.snapshot = {
+      follows: [{ created_at: m.followed_at, markets: market({ id: "1", price: 0.66 }) }],
+      runs: [run()],
+      alerts: [alertRow({ id: 7, market_id: "1", triggered_at: "2026-11-03T11:59:58.000Z", triggered_price: 0.65 })],
+    };
+    const loads = feed.snapshotLoads;
+    feed.setConnection("lost");
+    feed.setConnection("live");
+    await waitFor(() => expect(feed.snapshotLoads).toBe(loads + 1));
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "Triggered" })).getByText(/hit at 65%/)).toBeInTheDocument());
+    feed.pushMarket({ id: "1", price: 0.7, price_changed_at: NOW });
+    expect(within(toasts()).queryByText(/Alert hit/)).not.toBeInTheDocument();
+    expect(screen.getByText("Alert hit")).toBeInTheDocument();
+  });
+
+  it("keeps the local trigger, and doesn't toast again, if a refetch comes before the worker stored it", async () => {
+    const m = market({ id: "1", price: 0.55 });
+    const feed = showWithAlerts([m], [alertRow({ id: 7, market_id: "1" })]);
+    feed.pushMarket({ id: "1", price: 0.65, price_changed_at: NOW });
+    fireEvent.click(within(toasts()).getByRole("button", { name: "Dismiss" }));
+
+    feed.snapshot = {
+      follows: [{ created_at: m.followed_at, markets: market({ id: "1", price: 0.65 }) }],
+      runs: [run()],
+      alerts: [alertRow({ id: 7, market_id: "1" })],
+    };
+    const loads = feed.snapshotLoads;
+    feed.setConnection("lost");
+    feed.setConnection("live");
+    await waitFor(() => expect(feed.snapshotLoads).toBe(loads + 1));
+    await waitFor(() => expect(screen.getByText("Alert hit")).toBeInTheDocument());
+    feed.pushMarket({ id: "1", price: 0.7, price_changed_at: NOW });
+    expect(within(toasts()).queryByText(/Alert hit/)).not.toBeInTheDocument();
+  });
+
+  it("slides in, but not when the viewer prefers reduced motion", () => {
+    const feed = showWithAlerts([market({ id: "1", price: 0.55 })], [alertRow({ id: 7, market_id: "1" })]);
+    feed.pushMarket({ id: "1", price: 0.65, price_changed_at: NOW });
+    expect(within(toasts()).getByText(toastText).closest("[data-motion]")).toHaveAttribute("data-motion", "on");
+    cleanup();
+
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    try {
+      const again = showWithAlerts([market({ id: "1", price: 0.55 })], [alertRow({ id: 7, market_id: "1" })]);
+      again.pushMarket({ id: "1", price: 0.65, price_changed_at: NOW });
+      expect(within(toasts()).getByText(toastText).closest("[data-motion]")).toHaveAttribute("data-motion", "off");
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
+  it("draws each active alert as a dashed line on the sparkline, and drops it once hit", () => {
+    const feed = showWithAlerts(
+      [market({ id: "1", price: 0.55 })],
+      [
+        alertRow({ id: 7, market_id: "1" }),
+        alertRow({ id: 8, market_id: "1", direction: "below", threshold: 0.3 }),
+        alertRow({ id: 9, market_id: "1", threshold: 0.9, triggered_at: "2026-11-03T10:00:00.000Z", triggered_price: 0.9 }),
+      ],
+    );
+    expect(sparkLines()).toEqual(["0.6", "0.3"]);
+    feed.pushMarket({ id: "1", price: 0.65, price_changed_at: NOW });
+    expect(sparkLines()).toEqual(["0.3"]);
+  });
+});
+

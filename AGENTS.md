@@ -73,7 +73,9 @@ RLS is enabled on **every** table, and grants match the policies exactly:
 - `price_history`: select to `authenticated`.
 - `follows`: select, insert, delete to `authenticated` only, where `user_id = (auth.jwt() ->> 'sub')`. No update.
 - `alerts`: the same as `follows` — select, insert, delete to `authenticated` only, own rows only. No update by users;
-  not published to Realtime (the Watchlist picks up `triggered_at` on its snapshot refetch).
+  not published to Realtime (the Watchlist picks up `triggered_at` on its snapshot refetch; meanwhile it detects
+  crossings itself from the `markets` UPDATEs it already receives, with the same rule as `apply_prices`, and shows a
+  toast at once).
 - `visits`: select, insert, update to `authenticated` only, where `user_id = (auth.jwt() ->> 'sub')` (update also
   `with check`). No delete; not published to Realtime.
 - `run_lock`: RLS on, no policies and no grants to `anon`/`authenticated`; not published to Realtime.

@@ -1,4 +1,5 @@
 // The Watchlist's order and sections (AGENTS.md → Product rule 5). Pure, so it is unit-tested.
+import { isPast, type Alert } from "./alerts";
 import { moveDirection } from "./format";
 import { appendPoint, toHistory, type HistoryRow, type PricePoint } from "./history";
 import { type Market, toMarket } from "./markets";
@@ -69,4 +70,23 @@ export function applyMarketUpdate(
       : m.history;
     return { ...next, followed_at: m.followed_at, move, history };
   });
+}
+
+/**
+ * The active Alerts a Realtime UPDATE crossed, by the worker's rule in apply_prices (isPast): only when the
+ * Price actually changed, only untriggered Alerts, never on a Finished Market. The database triggers the same
+ * ones; this lets the Watchlist show it at once instead of on the next snapshot refetch.
+ */
+export function crossedAlerts(
+  items: readonly Followed[],
+  alerts: readonly Alert[],
+  update: Partial<Market> & { id: string },
+): Alert[] {
+  const m = items.find((i) => i.id === update.id);
+  if (!m) return [];
+  const next = toMarket({ ...m, ...update } as Market);
+  if (m.closed || next.closed || next.price === null || next.price === m.price) return [];
+  return alerts.filter(
+    (a) => a.market_id === m.id && a.triggered_at === null && isPast(a.direction, a.threshold, next.price),
+  );
 }
