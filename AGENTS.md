@@ -24,6 +24,11 @@ Terms are defined in [`CONTEXT.md`](CONTEXT.md): **Market**, **Event**, **Outcom
 - Supabase (a **new** project, not Assignment 4's) for the database, Realtime, Cron and the worker.
 - The worker is a Supabase **Edge Function** (Deno) in `supabase/functions/sync-markets/`. **`tsconfig.json` excludes
   `supabase`**, or the Next.js build type-checks Deno code and fails.
+- The landing's globe is **`react-globe.gl`** (three.js), loaded only in the browser (`next/dynamic`, `ssr: false`,
+  in `components/globe.tsx` → `components/globe-canvas.tsx`) on wide screens with WebGL, so the server render, the
+  build and the first-load bundle never touch WebGL. Country shapes are a static Natural Earth 110m admin-0 file
+  (public domain, properties stripped to `ISO_A2` and `NAME`) in `public/geo/countries-110m.json`. No map tiles, no
+  keys. Markers and shaded countries use the neutral accent (product rule 3).
 - Source: Polymarket's public APIs, no key — **gamma** (`gamma-api.polymarket.com`) for the Catalog and **CLOB**
   (`clob.polymarket.com`) for live Prices.
 
@@ -160,7 +165,7 @@ Each card separately shows when it **Moved** (`price_changed_at`), so a quiet Ma
 
 | URL | Who | What |
 |---|---|---|
-| `/` | signed out | Short landing page, link to Browse, sign in |
+| `/` | signed out | Static like Browse (Prices as of page load, the Catalog read once as `anon`): the **top-5 trending** carousel (Events by summed 24 h volume, `lib/trending.ts`; no auto-rotate under reduced motion), then the **globe** of Markets by place (`lib/places.ts`) with an always-present list of places, the selected place's Markets as Browse cards with sign-in-then-follow, and the **Global** shelf of placeless Markets; then a short intro, link to Browse, sign in. Until `markets.places` exists the page falls back to everything on the Global shelf |
 | `/` | signed in | Watchlist (live); empty state links to Browse |
 | `/browse` | everyone | `?category=`, `?follow=<id>` (after sign-in); static, grouped by Event |
 | `/status` | everyone | Last 20 Runs, live: time, ok/failed/skipped, rows changed, duration, warnings, error |

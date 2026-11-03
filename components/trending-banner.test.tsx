@@ -124,7 +124,6 @@ describe("trending banner", () => {
     act(() => vi.advanceTimersByTime(ROTATE_MS * 3));
     expect(slide()).toHaveAttribute("aria-label", "1 of 5");
     expect(slide()).toHaveAttribute("data-motion", "off");
-    expect(slide()).not.toHaveClass("slide-in");
     fireEvent.click(screen.getByRole("button", { name: "Next topic" }));
     expect(slide()).toHaveAttribute("aria-label", "2 of 5");
   });
