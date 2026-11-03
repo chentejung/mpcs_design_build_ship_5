@@ -1,8 +1,9 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { AuthControls } from "@/components/auth-controls";
-import { SiteNav } from "@/components/site-nav";
+import { SiteNav, SiteNavLinks } from "@/components/site-nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -39,7 +40,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 Odds Desk
               </Link>
               <div className="flex items-center gap-3">
-                <SiteNav />
+                {/* The current path is request data: on the sign-in catch-all it must sit in Suspense. */}
+                <Suspense fallback={<SiteNavLinks path={null} />}>
+                  <SiteNav />
+                </Suspense>
                 <AuthControls />
               </div>
             </div>

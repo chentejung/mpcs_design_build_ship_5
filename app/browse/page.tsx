@@ -1,11 +1,14 @@
+import { auth } from "@clerk/nextjs/server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { BrowseFreshness } from "@/components/browse-freshness";
+import { FollowAfterSignIn } from "@/components/follow-after-sign-in";
+import { FollowButton } from "@/components/follow-button";
 import { MarketRow } from "@/components/market-row";
 import { freshness } from "@/lib/freshness";
-import { CATEGORIES, groupByEvent, MARKET_COLUMNS, toCategory, toMarket, type CategorySlug } from "@/lib/markets";
+import { CATEGORIES, groupByEvent, MARKET_COLUMNS, marketLabel, toCategory, toMarket, type CategorySlug } from "@/lib/markets";
 import { supabase } from "@/lib/supabase";
 
 export const metadata: Metadata = { title: "Browse" };
@@ -15,7 +18,8 @@ const ENDING_SOON_MS = 60 * 60_000;
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 // Browse (product rule 6): one Category, grouped by Event, by 24-hour volume, hiding Markets that end within
-// the hour. Static: read once per request, open to signed-out visitors (anon can read markets).
+// the hour. Static: read once per request, open to signed-out visitors (anon can read markets). Signed in, each
+// Market shows Follow or Following; signed out, Follow opens sign-in and follows on return.
 export default function BrowsePage({ searchParams }: Props) {
   return (
     <>
@@ -31,16 +35,23 @@ async function BrowseCategory({ searchParams }: Props) {
   const category = toCategory((await searchParams).category);
   await connection();
   const now = new Date();
+  const { userId } = await auth();
   const db = supabase();
-  const [markets, runs] = await Promise.all([
+  const [markets, runs, follows] = await Promise.all([
     db.from("markets").select(MARKET_COLUMNS)
       .eq("category", category).eq("in_catalog", true).eq("closed", false)
       .or(`end_date.is.null,end_date.gt.${new Date(now.getTime() + ENDING_SOON_MS).toISOString()}`)
       .order("volume_24h", { ascending: false, nullsFirst: false }),
     db.from("worker_runs").select("finished_at, ok, skipped, error").order("started_at", { ascending: false }).limit(20),
+    // RLS returns only this user's Follows; signed out there are none to ask for.
+    userId ? db.from("follows").select("market_id") : Promise.resolve({ data: [], error: null }),
   ]);
   if (markets.error) throw new Error(`Couldn't load Markets: ${markets.error.message}`);
   if (runs.error) throw new Error(`Couldn't load the feed status: ${runs.error.message}`);
+  if (follows.error) throw new Error(`Couldn't load your Follows: ${follows.error.message}`);
+  const followed = new Set(follows.data.map((f) => f.market_id));
+  const signedIn = userId !== null;
+  const returnTo = `/browse?category=${category}`;
 
   const groups = groupByEvent(markets.data.map(toMarket));
   const f = freshness(runs.data, now, true);
@@ -49,6 +60,7 @@ async function BrowseCategory({ searchParams }: Props) {
   return (
     <>
       <CategoryTabs current={category} />
+      <FollowAfterSignIn signedIn={signedIn} />
       <div className="mt-4">
         <BrowseFreshness runs={runs.data} loadedAt={now.toISOString()} />
       </div>
@@ -65,7 +77,23 @@ async function BrowseCategory({ searchParams }: Props) {
                 <h2 className="border-b border-line bg-raised/50 px-4 py-2 text-sm font-semibold text-dim">{g.title}</h2>
               ) : null}
               <ul className="divide-y divide-line">
-                {g.markets.map((m) => <MarketRow key={m.id} market={m} now={now} muted={muted} />)}
+                {g.markets.map((m) => (
+                  <MarketRow
+                    key={m.id}
+                    market={m}
+                    now={now}
+                    muted={muted}
+                    action={
+                      <FollowButton
+                        marketId={m.id}
+                        label={marketLabel(m)}
+                        followed={followed.has(m.id)}
+                        signedIn={signedIn}
+                        returnTo={returnTo}
+                      />
+                    }
+                  />
+                ))}
               </ul>
             </section>
           ))}

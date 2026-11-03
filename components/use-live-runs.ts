@@ -4,16 +4,17 @@
 // channel that was live and dropped is Stale; one still connecting on first load isn't.
 import { useEffect, useState } from "react";
 import { mergeRuns, RUN_COLUMNS, RUN_LOG_SIZE, type Run } from "@/lib/runs";
-import { supabaseBrowser } from "@/lib/supabase-browser";
+import { useSupabaseBrowser } from "@/lib/supabase-browser";
 
 export type Connection = "connecting" | "live" | "lost";
 
 export function useLiveRuns(initial: Run[]): { runs: Run[]; connection: Connection } {
   const [runs, setRuns] = useState(initial);
   const [connection, setConnection] = useState<Connection>("connecting");
+  const db = useSupabaseBrowser();
 
   useEffect(() => {
-    const db = supabaseBrowser();
+    if (!db) return;
     let cancelled = false;
 
     const refetch = async () => {
@@ -41,7 +42,7 @@ export function useLiveRuns(initial: Run[]): { runs: Run[]; connection: Connecti
       cancelled = true;
       void db.removeChannel(channel);
     };
-  }, []);
+  }, [db]);
 
   return { runs, connection };
 }
