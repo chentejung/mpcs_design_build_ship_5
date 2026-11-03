@@ -296,3 +296,108 @@ describe("heartbeat", () => {
   });
 });
 
+describe("sparkline and Δ", () => {
+  // Only the clock is faked, so the page's refetch and waitFor still run.
+  const atNow = () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(NOW));
+  };
+  const t = (iso: string) => new Date(iso).getTime();
+  // 0.70 since the day before, 0.58 from 11:00, 0.60 from 11:30; the Price is now 0.62.
+  const history = [
+    { at: t("2026-11-02T09:00:00.000Z"), price: 0.7 },
+    { at: t("2026-11-03T11:00:00.000Z"), price: 0.58 },
+    { at: t("2026-11-03T11:30:00.000Z"), price: 0.6 },
+  ];
+  const sparkline = () => screen.getByRole("img", { name: /^Yes over 24 hours/ });
+
+  it("shows the last 24 hours of the first Outcome and its Δ 1h / Δ 24h in Chance points", () => {
+    atNow();
+    show([market({ id: "1", price: 0.62, history })]);
+    expect(sparkline()).toHaveAccessibleName("Yes over 24 hours: from 70 to 62");
+    expect(screen.getByText("Δ 1h +4.0")).toBeInTheDocument();
+    expect(screen.getByText("Δ 24h −8.0")).toBeInTheDocument();
+  });
+
+  it("shows a dash when there isn't enough history", () => {
+    atNow();
+    show([market({ id: "1", price: 0.62, history: [{ at: t("2026-11-03T11:30:00.000Z"), price: 0.6 }] })]);
+    expect(screen.getByText("Δ 1h —")).toBeInTheDocument();
+    expect(screen.getByText("Δ 24h —")).toBeInTheDocument();
+  });
+
+  it("extends the sparkline and changes Δ when a pushed update changes the Price", () => {
+    atNow();
+    const feed = show([market({ id: "1", price: 0.62, history })]);
+    expect(sparkline()).toHaveAttribute("data-points", "3");
+    feed.pushMarket({ id: "1", price: 0.65, price_changed_at: NOW });
+    expect(sparkline()).toHaveAccessibleName("Yes over 24 hours: from 70 to 65");
+    expect(sparkline()).toHaveAttribute("data-points", "4");
+    expect(screen.getByText("Δ 1h +7.0")).toBeInTheDocument();
+    expect(screen.getByText("Δ 24h −5.0")).toBeInTheDocument();
+  });
+
+  it("doesn't add a point for an update that leaves the Price unchanged", () => {
+    atNow();
+    const feed = show([market({ id: "1", price: 0.62, history })]);
+    feed.pushMarket({ id: "1", price: 0.62, volume_24h: 2000 });
+    expect(sparkline()).toHaveAttribute("data-points", "3");
+  });
+
+  it("replaces the history from the snapshot refetched after a reconnect", async () => {
+    atNow();
+    const feed = show([market({ id: "1", price: 0.62, history })]);
+    feed.snapshot = {
+      follows: [{
+        created_at: "2026-11-01T00:00:00.000Z",
+        markets: {
+          ...market({ id: "1", price: 0.5 }),
+          recent: [{ price: 0.5, recorded_at: "2026-11-03T11:50:00.000Z" }],
+          before: [{ price: 0.4, recorded_at: "2026-11-02T08:00:00.000Z" }],
+        },
+      }],
+      runs: [run()],
+    };
+    feed.setConnection("lost");
+    feed.setConnection("live");
+    await waitFor(() => expect(sparkline()).toHaveAccessibleName("Yes over 24 hours: from 40 to 50"));
+    expect(sparkline()).toHaveAttribute("data-points", "2");
+    expect(screen.getByText("Δ 1h +10.0")).toBeInTheDocument();
+    expect(screen.getByText("Δ 24h +10.0")).toBeInTheDocument();
+  });
+
+  it("shows a Finished Market's frozen history, as of when trading ended", () => {
+    atNow();
+    show([market({
+      id: "1", price: 0.99, closed: true, closed_at: "2026-11-03T11:00:00.000Z",
+      history: [{ at: t("2026-11-03T09:00:00.000Z"), price: 0.8 }, { at: t("2026-11-03T10:59:00.000Z"), price: 0.99 }],
+    })]);
+    const section = screen.getByText("Finished (1)").closest("details")!;
+    expect(within(section).getByRole("img", { name: "Yes over 24 hours: from 80 to 99" })).toBeInTheDocument();
+    expect(within(section).getByText("Δ 1h +19.0")).toBeInTheDocument();
+  });
+
+  it("draws in", () => {
+    atNow();
+    show([market({ id: "1", price: 0.62, history })]);
+    expect(sparkline()).toHaveAttribute("data-motion", "on");
+  });
+
+  it("doesn't draw in when the viewer prefers reduced motion", () => {
+    atNow();
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    try {
+      show([market({ id: "1", price: 0.62, history })]);
+      expect(sparkline()).toHaveAttribute("data-motion", "off");
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+});
+

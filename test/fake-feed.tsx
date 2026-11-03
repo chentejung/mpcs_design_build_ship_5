@@ -15,7 +15,7 @@ export type FakeFeed = {
   pushRun(run: Run): void;
   /** Set the channel's state; "live" counts as a (re)subscribe, which makes the page refetch. */
   setConnection(state: Connection): void;
-  /** What the next snapshot refetch returns. */
+  /** What the next snapshot refetch returns; its Markets may carry `recent` / `before` price_history rows. */
   snapshot: WatchlistSnapshot;
   /** How many times the page asked for a snapshot. */
   snapshotLoads: number;

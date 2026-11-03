@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { unfollow } from "@/app/actions/follows";
 import { MarketThumb } from "@/components/market-thumb";
+import { PriceTrend } from "@/components/price-trend";
 import { SplitBar } from "@/components/split-bar";
 import { ago, isYesNo, polymarketUrl } from "@/lib/format";
 import { marketLabel } from "@/lib/markets";
@@ -71,6 +72,8 @@ export function WatchCard({ market, now, muted }: { market: Followed; now: Date;
             <span className="w-4" aria-hidden />
           )}
         </div>
+
+        <PriceTrend market={market} now={now} muted={muted || market.closed} />
 
         <p className="mt-2 flex flex-wrap gap-x-2 text-xs text-faint">
           {market.closed ? (
