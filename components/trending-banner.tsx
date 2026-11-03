@@ -84,7 +84,10 @@ export function TrendingBanner({ topics }: { topics: readonly TrendingTopic[] })
                 {topic.title}
               </Link>
             </h3>
-            {leadLabel !== topic.title ? <p className="mt-1 truncate text-sm text-dim">Leading: {leadLabel}</p> : null}
+            {leadLabel !== topic.title ? (
+              // The Event's busiest Market, by its full question: a group item alone ("None") can mislead.
+              <p className="mt-1 truncate text-sm text-dim">Most traded: {topic.lead.question}</p>
+            ) : null}
             <div className="mt-4 max-w-md">
               <SplitBar outcomes={topic.lead.outcomes} price={topic.lead.price} size="lg" />
             </div>

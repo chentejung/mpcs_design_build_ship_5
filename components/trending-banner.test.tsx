@@ -26,7 +26,7 @@ function market(over: Partial<Market> & { id: string }): Market {
 }
 
 const TOPICS = trendingTopics([
-  market({ id: "1", event_id: "e1", event_title: "Senate control", group_item_title: "Democrats", volume_24h: 900, price: 0.62 }),
+  market({ id: "1", event_id: "e1", event_title: "Senate control", group_item_title: "Democrats", question: "Will the Democrats win the Senate?", volume_24h: 900, price: 0.62 }),
   market({ id: "2", question: "Hawks vs. Pacers", category: "sports", outcomes: ["Hawks", "Pacers"], volume_24h: 800, price: 0.4 }),
   market({ id: "3", question: "Will BTC hit $200k?", category: "crypto", volume_24h: 700 }),
   market({ id: "4", question: "Fed cut in December?", category: "finance", volume_24h: 600 }),
@@ -72,7 +72,7 @@ describe("trending banner", () => {
     expect(slide()).toHaveAttribute("aria-roledescription", "slide");
     expect(slide()).toHaveAttribute("aria-label", "1 of 5");
     expect(title()).toBe("Senate control");
-    expect(screen.getByText("Leading: Democrats")).toBeInTheDocument();
+    expect(screen.getByText("Most traded: Will the Democrats win the Senate?")).toBeInTheDocument();
     expect(screen.getByText("Politics")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Yes 62% chance, No 38% chance" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Senate control" })).toHaveAttribute("href", "/browse?category=politics");

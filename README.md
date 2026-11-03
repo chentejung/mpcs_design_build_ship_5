@@ -6,6 +6,9 @@ data is fresh, stale or down. Nobody trades here.
 
 Where Polymarket is built for betting, Odds Desk is built for **watching**:
 
+- **A world view:** the landing page opens on a banner of the 5 busiest topics right now, then a 3D globe of
+  Markets by place (from gamma's own tags): pick a country or region to see its Markets; placeless ones sit on a
+  **Global** shelf.
 - **Live movement you can see:** Chances roll to their new values, every card has a 24-hour sparkline with
   **Δ 1h / Δ 24h**, and a **Heatmap** view shows your whole Watchlist's movement at once.
 - **A reason to come back:** a **"Since your last visit"** Recap lists what moved (and what Finished) while you were
@@ -38,7 +41,8 @@ Supabase Cron (every 10 s) ──► Edge Function sync-markets ──► Postgr
    values are actually different. Each Run records itself in `worker_runs` (ok / failed / skipped, rows changed,
    duration, warnings, error). The worker writes with the Supabase secret key, which exists only in the function's
    environment.
-3. **Database.** Postgres with row-level security on every table. Anyone can read Markets and Runs; only you can see
+3. **Database.** Postgres with row-level security on every table. Each Market carries its `places` (country codes and
+   regions, from gamma's tags through a tested lookup table in the worker; empty means Global). Anyone can read Markets and Runs; only you can see
    and change your own Follows, Alerts and last visit (`user_id` comes from your Clerk sign-in token, never from app
    code). Triggers stop a 26th Follow and a 4th Alert on one Market (or a 51st overall). An Alert can exist only on a
    Market you Follow, and Unfollowing deletes it. When `apply_prices` saves a changed Price, it also marks any Alert
@@ -61,7 +65,7 @@ Supabase Cron (every 10 s) ──► Edge Function sync-markets ──► Postgr
 
 | URL | What |
 |---|---|
-| `/` | Signed out: an intro with the busiest Markets right now. Signed in: your live **Watchlist**: the Recap, then live Markets in the order you followed them (as **Cards** or a **Heatmap**), triggered Alerts, and a collapsed **Finished (n)** with **Clear finished**. |
+| `/` | Signed out: a carousel of the 5 trending topics (Events by 24-hour volume), a 3D globe of Markets by country and region with a place list and panel (a plain list on small screens or without WebGL), and a **Global** shelf. Signed in: your live **Watchlist**: the Recap, then live Markets in the order you followed them (as **Cards** or a **Heatmap**), triggered Alerts, and a collapsed **Finished (n)** with **Clear finished**. |
 | `/browse?category=politics\|sports\|crypto\|finance\|tech\|world\|culture` | A grid of image cards grouped by Event, by 24-hour volume, with Follow. Open to everyone; a signed-out Follow signs you in and then follows. Prices as of page load, with Refresh. |
 | `/status` | The worker's last 20 Runs, live. |
 
@@ -116,7 +120,7 @@ The worker runs on Supabase, not locally; the local app reads the same live data
 | Path | What |
 |---|---|
 | `app/`, `components/`, `lib/` | The Next.js app |
-| `supabase/migrations/` | The schema, only ever changed by a new migration (0001 tables + RLS, 0002 worker functions, 0003 cron secret, 0004 schedules, 0005 seven Categories, 0006 Alerts, 0007 visits) |
+| `supabase/migrations/` | The schema, only ever changed by a new migration (0001 tables + RLS, 0002 worker functions, 0003 cron secret, 0004 schedules, 0005 seven Categories, 0006 Alerts, 0007 visits, 0008 places) |
 | `supabase/functions/sync-markets/` | The worker: `index.ts` (Deno) and `logic.ts` (pure, tested) |
 | `supabase/tests/checks.sql` | The SQL checks |
 | `test/` | UI test setup and the fake live feed |
