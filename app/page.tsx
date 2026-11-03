@@ -48,7 +48,7 @@ function Landing() {
     <section className="max-w-2xl py-10">
       <h1 className="text-3xl font-semibold tracking-tight">Watch the crowd&rsquo;s Chance move, live.</h1>
       <p className="mt-4 text-dim">
-        Odds Desk follows Polymarket&rsquo;s busiest Politics, Sports and Crypto Markets. Follow up to 25 and your
+        Odds Desk follows Polymarket&rsquo;s busiest Markets in Politics, Sports, Crypto, Finance, Tech, World and Culture. Follow up to 25 and your
         Watchlist updates on its own every few seconds, with a clear sign when the data is fresh, stale or down.
       </p>
       <div className="mt-8 flex gap-3">

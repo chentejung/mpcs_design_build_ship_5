@@ -1,6 +1,6 @@
 # Odds Desk
 
-A read-only watchlist of Polymarket prediction markets. Follow up to 25 Politics, Sports and Crypto Markets and watch
+A read-only watchlist of Polymarket prediction markets. Follow up to 25 Politics, Sports, Crypto, Finance, Tech, World and Culture Markets and watch
 the crowd's Chance on each one move live, with a clear sign of whether the data is fresh, stale or down. Nobody trades
 here.
 

@@ -77,7 +77,7 @@ export function WatchlistLive({
       {items.length === 0 ? (
         <div className="mt-8 rounded-lg border border-dashed border-line px-6 py-12 text-center">
           <p className="font-medium">Follow a Market to start</p>
-          <p className="mt-1 text-sm text-dim">Pick up to {FOLLOW_LIMIT} from Politics, Sports and Crypto; they&rsquo;ll update here on their own.</p>
+          <p className="mt-1 text-sm text-dim">Pick up to {FOLLOW_LIMIT} from any Category; they&rsquo;ll update here on their own.</p>
           <Link href="/browse" className="mt-4 inline-block rounded-md bg-side-a px-4 py-2 text-sm font-semibold text-desk hover:bg-ink">
             Browse Markets
           </Link>

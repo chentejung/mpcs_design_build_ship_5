@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   buildCatalogPayload,
+  CATALOG_LISTS,
   catalogDue,
   catalogUrl,
   chunk,
@@ -189,6 +190,42 @@ describe("buildCatalogPayload", () => {
     const payload = buildCatalogPayload([{ category: "politics", rows: [a] }, { category: "crypto", rows: [b] }], []);
     expect(payload.categories).toEqual(["politics", "crypto"]);
     expect(payload.markets).toEqual([a]);
+  });
+});
+
+// The four newer Category lists, saved on 2026-11-03 at 16:16:54Z.
+const NOW_V2 = new Date("2026-11-03T16:16:54Z");
+const fixtureFor = (category: string) => fixture(`gamma-${category}.json`);
+
+describe("the Catalog's seven Category lists, from real gamma responses", () => {
+  const parsed = CATALOG_LISTS.map((l) => ({
+    category: l.category,
+    rows: parseCatalog(fixtureFor(l.category), l.category, ["politics", "sports", "crypto"].includes(l.category) ? NOW : NOW_V2).rows,
+  }));
+
+  it("fetches Politics, Sports, Crypto, Finance, Tech, World and Culture, in that order", () => {
+    expect(CATALOG_LISTS.map((l) => [l.category, l.tagId])).toEqual([
+      ["politics", 2], ["sports", 1], ["crypto", 21], ["finance", 120], ["tech", 1401], ["world", 100265], ["culture", 596],
+    ]);
+  });
+
+  it("keeps two-Outcome Markets with an order book from each new list", () => {
+    for (const c of ["finance", "tech", "world", "culture"]) {
+      const rows = parsed.find((p) => p.category === c)!.rows;
+      expect(rows.length, c).toBeGreaterThan(20);
+      expect(rows.every((r) => r.category === c && r.outcomes.length === 2 && r.token_id), c).toBe(true);
+    }
+  });
+
+  it("lists a Market in two Categories once, under the earlier Category", () => {
+    const payload = buildCatalogPayload(parsed, []);
+    expect(payload.categories).toEqual(["politics", "sports", "crypto", "finance", "tech", "world", "culture"]);
+    const categoryOf = (id: string) => payload.markets.filter((m) => m.id === id).map((m) => m.category);
+    // "Will the U.S. invade Iran before 2027?" is in both the Politics and World lists.
+    expect(categoryOf("665374")).toEqual(["politics"]);
+    // "Will Crude Oil reach a new all-time high by December 31?" is in both Finance and World.
+    expect(categoryOf("2126461")).toEqual(["finance"]);
+    expect(new Set(payload.markets.map((m) => m.id)).size).toBe(payload.markets.length);
   });
 });
 

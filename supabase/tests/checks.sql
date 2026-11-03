@@ -1,4 +1,4 @@
--- SQL checks for migrations 0001–0002. Everything runs in one transaction that is
+-- SQL checks for migrations 0001–0005. Everything runs in one transaction that is
 -- rolled back, so it leaves no data behind. Run it through the Supabase MCP
 -- execute_sql (or psql). Each check raises an error on failure and a
 -- "PASS …" notice on success. Uses Market ids m1…m31, which never collide with
@@ -124,6 +124,26 @@ do $$ begin
     raise exception 'user wrote markets';
   exception when insufficient_privilege then null; end;
   raise notice 'PASS authenticated: cannot write markets or call worker functions';
+end $$;
+
+-- 9. (0005) All seven Categories are accepted; any other is rejected.
+set local role service_role;
+do $$ declare n int; begin
+  n := public.upsert_catalog(jsonb_build_object(
+    'categories', '["finance","tech","world","culture"]'::jsonb,
+    'markets', (select jsonb_agg(jsonb_build_object('id','c'||c,'question','Q','slug','s'||c,'category',c,
+      'outcomes','["Yes","No"]'::jsonb,'token_id','tc'||c,'price',0.5,'volume_24h',1,
+      'end_date','2026-12-01','closed',false,'in_catalog',true))
+     from unnest(array['finance','tech','world','culture']) c)));
+  assert n = 4, 'four new-Category Markets should be inserted, got '||n;
+  assert (select count(distinct category) from public.markets where id like 'm%' or id like 'c%') = 6,
+    'politics, crypto and the four new Categories';
+  begin
+    insert into public.markets (id, question, slug, category, outcomes, token_id)
+    values ('cx', 'x', 'x', 'weather', '{a,b}', 'x');
+    raise exception 'category weather was accepted';
+  exception when check_violation then null; end;
+  raise notice 'PASS Categories: finance, tech, world, culture accepted; weather rejected';
 end $$;
 
 rollback;

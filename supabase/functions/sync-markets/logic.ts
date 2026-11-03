@@ -1,7 +1,7 @@
 // Pure logic for the sync-markets worker. No Deno APIs and no npm: imports, so
 // vitest can test it against saved real responses (fixtures/). Terms are in CONTEXT.md.
 
-export type Category = "politics" | "sports" | "crypto";
+export type Category = "politics" | "sports" | "crypto" | "finance" | "tech" | "world" | "culture";
 
 export const GAMMA = "https://gamma-api.polymarket.com";
 export const CLOB = "https://clob.polymarket.com";
@@ -12,6 +12,12 @@ export const CATALOG_LISTS: readonly { category: Category; tagId: number; limit:
   // One night's games fill the top of the Sports list, so fetch more for a useful Browse.
   { category: "sports", tagId: 1, limit: 100 },
   { category: "crypto", tagId: 21, limit: 30 },
+  // Added in v2 (tags checked 2026-11-03). Later lists lose overlaps to earlier ones: a Market in both Politics
+  // and World (gamma's Geopolitics) stays Politics. Culture is gamma's "pop-culture" tag.
+  { category: "finance", tagId: 120, limit: 30 },
+  { category: "tech", tagId: 1401, limit: 30 },
+  { category: "world", tagId: 100265, limit: 30 },
+  { category: "culture", tagId: 596, limit: 30 },
 ];
 
 export const CATALOG_EVERY_MS = 5 * 60_000;

@@ -5,6 +5,10 @@ export const CATEGORIES = [
   { slug: "politics", label: "Politics" },
   { slug: "sports", label: "Sports" },
   { slug: "crypto", label: "Crypto" },
+  { slug: "finance", label: "Finance" },
+  { slug: "tech", label: "Tech" },
+  { slug: "world", label: "World" },
+  { slug: "culture", label: "Culture" },
 ] as const;
 
 export type CategorySlug = (typeof CATEGORIES)[number]["slug"];

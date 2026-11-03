@@ -8,7 +8,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: { template: "%s · Odds Desk", default: "Odds Desk" },
-  description: "Follow Polymarket's Politics, Sports and Crypto Markets and watch the crowd's Chance move live.",
+  description: "Follow Polymarket's busiest Markets in Politics, Sports, Crypto, Finance, Tech, World and Culture and watch the crowd's Chance move live.",
 };
 
 // Clerk's components in the desk's colours.

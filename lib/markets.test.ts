@@ -8,9 +8,13 @@ const market = (over: Partial<Market>): Market => ({
 });
 
 describe("toCategory", () => {
-  it("accepts the three Categories and defaults to politics", () => {
+  it("accepts the seven Categories and defaults to politics", () => {
     expect(toCategory("sports")).toBe("sports");
     expect(toCategory("crypto")).toBe("crypto");
+    expect(toCategory("finance")).toBe("finance");
+    expect(toCategory("tech")).toBe("tech");
+    expect(toCategory("world")).toBe("world");
+    expect(toCategory("culture")).toBe("culture");
     expect(toCategory(undefined)).toBe("politics");
     expect(toCategory("weather")).toBe("politics");
     expect(toCategory(["sports"])).toBe("politics");

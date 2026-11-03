@@ -20,7 +20,8 @@ is tracked; the second is its complement.
 _Avoid_: side, answer, token
 
 **Category**:
-One of the three areas Markets are drawn from: Politics, Sports or Crypto.
+One of the seven areas Markets are drawn from: Politics, Sports, Crypto, Finance, Tech, World (gamma's Geopolitics) or
+Culture.
 _Avoid_: tag, topic
 
 **Catalog**:

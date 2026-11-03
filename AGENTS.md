@@ -39,7 +39,7 @@ Terms are defined in [`CONTEXT.md`](CONTEXT.md): **Market**, **Event**, **Outcom
 4. **At most 25 Follows per user, Finished included**, enforced by a database trigger ("Watchlist full (25)").
 5. **Watchlist:** live Markets first, in Follow order (no reordering while you read), then a collapsed
    **Finished (n)** section with **Clear finished** (deletes those Follows). Finished cards show the frozen final split.
-6. **Browse** (`/browse?category=politics|sports|crypto`, default `politics`) is grouped by Event, sorted by 24-hour
+6. **Browse** (`/browse?category=politics|sports|crypto|finance|tech|world|culture`, default `politics`) is grouped by Event, sorted by 24-hour
    volume, hides Markets ending within the next hour and shows "Ends in …" on the rest. A Market past its end
    date that is still trading stays: on Sports that's a game in play (gamma's end date is the kickoff), marked
    **In play**; elsewhere "Still trading". It is **static** (Prices as of page
@@ -89,7 +89,7 @@ every (re)subscribe it **refetches its snapshot**, because Realtime doesn't repl
   1. Take the run lock (`try_run_lock()`, a 30 s lease that expires on its own if a Run crashes); if a previous Run
      holds it, record a **skipped** Run and exit. Release it with `release_run_lock(holder)` in `finally`.
   2. Every ~5 minutes, refresh the Catalog from gamma: `/markets?tag_id=…&active=true&closed=false&order=volume24hr&ascending=false&limit=…`
-     for Politics (2, limit 30), Sports (1, **limit 100**, because one night's games fill the top of the list), Crypto (21, limit 30), plus `/markets?closed=true&id=…` for followed Markets outside it
+     for Politics (2, limit 30), Sports (1, **limit 100**, because one night's games fill the top of the list), Crypto (21, limit 30), Finance (120, limit 30), Tech (1401, limit 30), World (gamma's Geopolitics, 100265, limit 30), Culture (gamma's pop-culture, 596, limit 30), in that order; a Market in two lists keeps the first (so Politics wins over World). Plus `/markets?closed=true&id=…` for followed Markets outside it
      (to notice Finished ones; without `closed=true` gamma silently leaves Finished Markets out). Never call `/events` (tens of MB). → `upsert_catalog(jsonb)` with
      `{categories, markets}`: only the Categories fetched successfully lose Markets that dropped out of their list.
   3. Every Run, `POST https://clob.polymarket.com/midpoints` for the first-Outcome tokens of Catalog ∪ followed,
@@ -183,7 +183,8 @@ Each card separately shows when it **Moved** (`price_changed_at`), so a quiet Ma
 Cut in this order, never the core (worker, Realtime, Freshness states, RLS on Follows, the Vercel deploy):
 1. Sparkline + Δ 1h
 2. `/status` page (fold the run log into a collapsible panel)
-3. Sports and Crypto (Politics only)
+3. Finance, Tech, World and Culture (keep Politics, Sports, Crypto)
+4. Sports and Crypto (Politics only)
 
 ## Agent skills
 
