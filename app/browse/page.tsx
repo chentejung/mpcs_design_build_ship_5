@@ -1,14 +1,13 @@
 import { auth } from "@clerk/nextjs/server";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { BrowseFreshness } from "@/components/browse-freshness";
+import { BrowseCard } from "@/components/browse-card";
+import { CategoryTabs } from "@/components/category-tabs";
 import { FollowAfterSignIn } from "@/components/follow-after-sign-in";
-import { FollowButton } from "@/components/follow-button";
-import { MarketRow } from "@/components/market-row";
 import { freshness } from "@/lib/freshness";
-import { CATEGORIES, groupByEvent, MARKET_COLUMNS, marketLabel, toCategory, toMarket, type CategorySlug } from "@/lib/markets";
+import { CATEGORIES, groupByEvent, MARKET_COLUMNS, toCategory, toMarket, type EventGroup, type Market } from "@/lib/markets";
 import { supabase } from "@/lib/supabase";
 
 export const metadata: Metadata = { title: "Browse" };
@@ -55,6 +54,7 @@ async function BrowseCategory({ searchParams }: Props) {
   const returnTo = `/browse?category=${category}`;
 
   const groups = groupByEvent(markets.data.map(toMarket));
+  const sections = toSections(groups);
   const f = freshness(runs.data, now, true);
   const muted = f.state === "stale" || f.state === "down";
 
@@ -66,33 +66,25 @@ async function BrowseCategory({ searchParams }: Props) {
         <BrowseFreshness runs={runs.data} loadedAt={now.toISOString()} />
       </div>
       {groups.length === 0 ? (
-        <p className="mt-10 rounded-lg border border-line bg-panel px-4 py-8 text-center text-dim">
+        <p className="mt-10 rounded-xl border border-line bg-panel px-4 py-8 text-center text-dim shadow-card">
           No {CATEGORIES.find((c) => c.slug === category)!.label} Markets right now. Most end within the hour on
           busy nights; try again shortly.
         </p>
       ) : (
-        <div className="mt-6 space-y-4">
-          {groups.map((g) => (
-            <section key={g.key} aria-label={g.title} className="overflow-hidden rounded-xl border border-line bg-panel shadow-card">
-              {g.showHeading ? (
-                <h2 className="border-b border-line bg-raised/50 px-4 py-2 text-sm font-semibold text-dim">{g.title}</h2>
-              ) : null}
-              <ul className="divide-y divide-line">
+        <div className="mt-6 space-y-8">
+          {sections.map((g) => (
+            <section key={g.key} aria-label={g.title ?? undefined}>
+              {g.title ? <h2 className="mb-3 text-base font-semibold tracking-tight text-ink">{g.title}</h2> : null}
+              <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {g.markets.map((m) => (
-                  <MarketRow
+                  <BrowseCard
                     key={m.id}
                     market={m}
                     now={now}
                     muted={muted}
-                    action={
-                      <FollowButton
-                        marketId={m.id}
-                        label={marketLabel(m)}
-                        followed={followed.has(m.id)}
-                        signedIn={signedIn}
-                        returnTo={returnTo}
-                      />
-                    }
+                    followed={followed.has(m.id)}
+                    signedIn={signedIn}
+                    returnTo={returnTo}
                   />
                 ))}
               </ul>
@@ -104,30 +96,25 @@ async function BrowseCategory({ searchParams }: Props) {
   );
 }
 
-function CategoryTabs({ current }: { current: CategorySlug }) {
-  return (
-    <nav aria-label="Category" className="mt-4 flex gap-1 border-b border-line">
-      {CATEGORIES.map((c) => (
-        <Link
-          key={c.slug}
-          href={`/browse?category=${c.slug}`}
-          aria-current={c.slug === current ? "page" : undefined}
-          className={`-mb-px border-b-2 px-3 py-2 text-sm ${
-            c.slug === current ? "border-accent font-medium text-ink" : "border-transparent text-dim hover:text-ink"
-          }`}
-        >
-          {c.label}
-        </Link>
-      ))}
-    </nav>
-  );
+type Section = { key: string; title: string | null; markets: Market[] };
+
+/** Events with a heading get their own grid; runs of heading-less single-Market Events share one, in order. */
+function toSections(groups: EventGroup[]): Section[] {
+  const sections: Section[] = [];
+  for (const g of groups) {
+    const last = sections.at(-1);
+    if (g.showHeading) sections.push({ key: g.key, title: g.title, markets: g.markets });
+    else if (last && last.title === null) last.markets.push(...g.markets);
+    else sections.push({ key: g.key, title: null, markets: [...g.markets] });
+  }
+  return sections;
 }
 
 function BrowseSkeleton() {
   return (
-    <div role="status" aria-label="Loading Markets" className="mt-6 space-y-4">
-      {[0, 1, 2].map((i) => (
-        <div key={i} className="h-28 animate-pulse rounded-lg border border-line bg-panel motion-reduce:animate-none" />
+    <div role="status" aria-label="Loading Markets" className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <div key={i} className="h-44 animate-pulse rounded-xl border border-line bg-panel motion-reduce:animate-none" />
       ))}
     </div>
   );
